@@ -1,6 +1,6 @@
-import os, threading, time, csv, io
+import os, threading, time, csv, io, json
 from datetime import datetime, date, timedelta
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, Response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -105,6 +105,139 @@ class AIReview(db.Model):
     review_text = db.Column(db.Text, nullable=True)
     patterns = db.Column(db.Text, nullable=True)
     score = db.Column(db.Integer, default=0)
+
+class StrategyTemplate(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    category = db.Column(db.String(50), nullable=True)
+    direction = db.Column(db.String(10), nullable=True)
+    timeframe = db.Column(db.String(20), nullable=True)
+    session = db.Column(db.String(30), nullable=True)
+    entry_criteria = db.Column(db.Text, nullable=True)
+    exit_criteria = db.Column(db.Text, nullable=True)
+    risk_rules = db.Column(db.Text, nullable=True)
+    checklist = db.Column(db.Text, nullable=True)
+    is_custom = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+ICTTEMPLATES = [
+    {'name':'FVG (Fair Value Gap)','category':'ICT','direction':'BOTH','timeframe':'1m-5m','session':'Killzone',
+     'description':'Trade the Fair Value Gap — price returns to fill the gap and continues.',
+     'entry_criteria':'1. Identify FVG on 1m/5m\n2. Wait for price to touch 50% of gap\n3. Entry on confirmation close\n4. Must have MSS on HTF',
+     'exit_criteria':'1. TP1: 1:1 risk\n2. TP2: Next OB/FVG\n3. Trail at HH/HL break',
+     'risk_rules':'1. SL beyond FVG opposite side\n2. Max 1% risk\n3. No trade if gap >20 points',
+     'checklist':'FVG identified on MTF\nPrice at 50% gap\nHTF trend aligned\nCandle confirmation\nNo conflicting news'},
+    {'name':'Order Block (OB)','category':'ICT','direction':'BOTH','timeframe':'5m-15m','session':'London/NY',
+     'description':'Trade the institutional Order Block — price revisits the OB and reacts.',
+     'entry_criteria':'1. Identify OB on HTF (1h/4h)\n2. Drop to 5m for entry\n3. Wait for LQ grab\n4. Enter on MSS + FVG',
+     'exit_criteria':'1. TP1: Previous swing\n2. TP2: Next OB level\n3. Trail at 1:1',
+     'risk_rules':'1. SL beyond OB by 2-3 points\n2. 0.5-1.5% risk\n3. If OB breached, invalidate',
+     'checklist':'HTF OB confirmed\nLQ grab occurred\nMSS confirmed\nFVG for entry\nR:R >= 1:2'},
+    {'name':'Liquidity Grab','category':'ICT','direction':'BOTH','timeframe':'5m-15m','session':'NY AM',
+     'description':'Identify liquidity grabs at key levels and trade the reversal.',
+     'entry_criteria':'1. Identify equal HH/LL on 5m-15m\n2. Wait for grab above/below\n3. MSS reversal\n4. Enter on FVG or orderflow shift',
+     'exit_criteria':'1. TP1: Opposite LQ zone\n2. TP2: Next level\n3. Trail at 1.5R',
+     'risk_rules':'1. SL beyond grab wick\n2. Max 1% risk\n3. No reversal in 3 candles? Exit',
+     'checklist':'Equal HH/LL identified\nLQ occurred\nMSS confirmed\nEntry FVG formed\nBOS on HTF'},
+    {'name':'Killzone Strategy','category':'ICT','direction':'BOTH','timeframe':'1m-5m','session':'Killzone',
+     'description':'Trade using ICT Killzone concepts — London, NY AM, NY PM sessions.',
+     'entry_criteria':'1. Identify killzone session\n2. Look for PD array\n3. Wait for displacement\n4. Enter on MSS + retracement',
+     'exit_criteria':'1. TP: Killzone opposite edge\n2. SL: Beyond the PD array',
+     'risk_rules':'1. Only trade during killzone\n2. Max 2 trades per killzone',
+     'checklist':'Killzone active\nPD array identified\nDisplacement occurred\nMSS confirmed\nRisk within limits'},
+    {'name':'Silver Bullet','category':'ICT','direction':'BOTH','timeframe':'1m','session':'Killzone',
+     'description':'ICT Silver Bullet — first 15 min of London and NY killzones.',
+     'entry_criteria':'1. First 15 min of London/NY killzone\n2. Identify sweep\n3. If sweep occurred, expect reversal\n4. Enter on 1m FVG',
+     'exit_criteria':'1. TP: Previous day H/L\n2. SL: Beyond sweep wick\n3. Max hold: 30 min',
+     'risk_rules':'1. Only first 15 min of session\n2. 0.5% risk per trade\n3. Miss the window? Skip.',
+     'checklist':'First 15 min window\nSweep occurred\n1m FVG formed\nHTF bias aligned\nNews check clear'},
+    {'name':'Breaker Block','category':'ICT','direction':'BOTH','timeframe':'15m-1h','session':'Any',
+     'description':'Trade the Breaker Block — MSS followed by breaker retest.',
+     'entry_criteria':'1. Identify MSS on HTF\n2. Price retraces to old OB\n3. That OB becomes Breaker\n4. Enter on LQ grab through breaker',
+     'exit_criteria':'1. TP: Recent swing\n2. Trail at structure break',
+     'risk_rules':'1. SL beyond breaker\n2. 1% risk\n3. Don\'t trade in ranging market',
+     'checklist':'HTF MSS identified\nBreaker drawn\nLQ grab occurred\nTrend aligned\nR:R >= 1:3'},
+]
+
+# ─── NEW MODELS ─────────────────────────────────────────
+
+class BacktestRun(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    strategy_name = db.Column(db.String(100), nullable=False)
+    strategy_variant = db.Column(db.String(50), default='Standard')
+    symbol = db.Column(db.String(20), nullable=False)
+    asset_class = db.Column(db.String(30))
+    timeframe = db.Column(db.String(10))
+    date_from = db.Column(db.Date)
+    date_to = db.Column(db.Date)
+    parameters = db.Column(db.Text)
+    status = db.Column(db.String(20), default='pending')
+    total_trades = db.Column(db.Integer, default=0)
+    win_rate = db.Column(db.Float)
+    profit_factor = db.Column(db.Float)
+    avg_r = db.Column(db.Float)
+    total_pnl = db.Column(db.Float)
+    max_drawdown_pct = db.Column(db.Float)
+    max_drawdown_dollar = db.Column(db.Float)
+    sharpe = db.Column(db.Float)
+    sortino = db.Column(db.Float)
+    expectancy = db.Column(db.Float)
+    recovery_factor = db.Column(db.Float)
+    calmar = db.Column(db.Float)
+    monte_carlo_p95 = db.Column(db.Float)
+    monte_carlo_p05 = db.Column(db.Float)
+    monte_carlo_profit_prob = db.Column(db.Float)
+    equity_curve = db.Column(db.Text)
+    drawdown_series = db.Column(db.Text)
+    monthly_returns = db.Column(db.Text)
+    regime_analysis = db.Column(db.Text)
+    wisdom_score = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class BacktestTrade(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    run_id = db.Column(db.Integer, db.ForeignKey('backtest_run.id'), nullable=False)
+    entry_date = db.Column(db.DateTime)
+    exit_date = db.Column(db.DateTime)
+    direction = db.Column(db.String(10))
+    entry_price = db.Column(db.Float)
+    exit_price = db.Column(db.Float)
+    quantity = db.Column(db.Float)
+    pnl = db.Column(db.Float)
+    r_multiple = db.Column(db.Float)
+    result = db.Column(db.String(10))
+    entry_reason = db.Column(db.String(200))
+    exit_reason = db.Column(db.String(200))
+
+class ReplayCache(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    trade_id = db.Column(db.Integer, db.ForeignKey('trade.id'), nullable=False)
+    candles_before = db.Column(db.Integer, default=20)
+    candles_after = db.Column(db.Integer, default=20)
+    candle_data = db.Column(db.Text)
+    status = db.Column(db.String(20), default='pending')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class OracleInsight(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    insight_type = db.Column(db.String(30))
+    title = db.Column(db.String(200))
+    content = db.Column(db.Text)
+    score = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class SyncLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    source = db.Column(db.String(20))
+    event = db.Column(db.String(50))
+    trade_id = db.Column(db.Integer, db.ForeignKey('trade.id'), nullable=True)
+    details = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 with app.app_context():
     db.create_all()
@@ -395,7 +528,8 @@ def add_trade():
         db.session.commit()
         flash('Trade saved!', 'success')
         return redirect(url_for('trades'))
-    return render_template('add_trade.html', trade=None)
+    setup_type = request.args.get('setup', '')
+    return render_template('add_trade.html', trade=None, setup_type=setup_type)
 
 @app.route('/trade/edit/<int:trade_id>', methods=['GET', 'POST'])
 @login_required
@@ -853,6 +987,293 @@ def notebook_delete(entry_id):
         db.session.delete(entry)
         db.session.commit()
     return redirect(url_for('notebook'))
+
+# ─── STRATEGY TEMPLATES ──────────────────────────────────
+
+@app.route('/strategies')
+@login_required
+def strategies():
+    custom = StrategyTemplate.query.filter_by(user_id=current_user.id).order_by(StrategyTemplate.name).all()
+    return render_template('strategies.html', templates=ICTTEMPLATES, custom=custom)
+
+@app.route('/strategies/apply', methods=['GET', 'POST'])
+@login_required
+def strategy_apply():
+    name = request.args.get('name', '')
+    template = next((t for t in ICTTEMPLATES if t['name'] == name), None)
+    if not template:
+        flash('Strategy not found.', 'error')
+        return redirect(url_for('strategies'))
+
+    if request.method == 'POST':
+        tactic = request.form.get('tactic', '')
+        checklist_results = request.form.get('checklist_results', '')
+
+        # Check existing trades or just return to strategies with a flash
+        flash(f'Applied "{template["name"]}" to your trading plan. Follow the checklist!', 'success')
+        return redirect(url_for('strategies'))
+
+    return render_template('strategy_detail.html', template=template)
+
+@app.route('/api/trade/<int:trade_id>/strategy', methods=['POST'])
+@login_required
+def tag_trade_strategy(trade_id):
+    trade = Trade.query.get_or_404(trade_id)
+    if trade.user_id != current_user.id:
+        return jsonify({'error': 'unauthorized'}), 403
+    data = request.get_json()
+    trade.setup_type = data.get('strategy', trade.setup_type)
+    db.session.commit()
+    return jsonify({'ok': True})
+
+# ─── MT5 SYNC API ─────────────────────────────────────
+
+@app.route('/api/sync/trade', methods=['POST'])
+def sync_trade():
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'no data'}), 400
+    user = User.query.filter_by(id=data.get('user_id', 0)).first()
+    if not user:
+        return jsonify({'error': 'invalid user'}), 401
+    symbol = data.get('symbol', '').upper()
+    direction = data.get('direction', 'LONG')
+    entry = float(data.get('entry_price', 0))
+    exit_price = float(data.get('exit_price', 0))
+    qty = float(data.get('volume', 0.1))
+    pnl = (exit_price - entry) * qty if direction == 'LONG' else (entry - exit_price) * qty
+    pnl -= float(data.get('commission', 0))
+    result = 'WIN' if pnl > 0 else 'LOSS'
+    entry_time = datetime.fromisoformat(data['entry_time'].replace('Z','+00:00')) if 'entry_time' in data else datetime.utcnow()
+    exit_time = datetime.fromisoformat(data['exit_time'].replace('Z','+00:00')) if 'exit_time' in data else datetime.utcnow()
+    setup = data.get('setup_type', '')
+    notes = data.get('comment', '')
+    trade = Trade(user_id=user.id, symbol=symbol, direction=direction, entry_price=entry, exit_price=exit_price, quantity=qty, fees=float(data.get('commission',0)), pnl=round(pnl,2), result=result, setup_type=setup, session=data.get('ict_snapshot',{}).get('session','') if isinstance(data.get('ict_snapshot'),dict) else '', notes=notes, entry_date=entry_time, exit_date=exit_time)
+    db.session.add(trade)
+    db.session.flush()
+    db.session.add(SyncLog(user_id=user.id, source='mt5', event='trade_synced', trade_id=trade.id, details=json.dumps(data)))
+    db.session.commit()
+    return jsonify({'status': 'ok', 'trade_id': trade.id})
+
+@app.route('/api/sync/positions', methods=['POST'])
+@login_required
+def sync_positions():
+    data = request.get_json() or {}
+    for pos in data.get('positions', []):
+        db.session.add(SyncLog(user_id=current_user.id, source='mt5', event='position_update', details=json.dumps(pos)))
+    db.session.commit()
+    return jsonify({'status': 'ok', 'count': len(data.get('positions', []))})
+
+# ─── BACKTESTING ──────────────────────────────────────
+
+@app.route('/backtest/new', methods=['GET', 'POST'])
+@login_required
+def backtest_new():
+    symbols = sorted(set([s[0] for s in Trade.query.filter_by(user_id=current_user.id).with_entities(Trade.symbol).distinct().all()] + ['XAUUSD','XAGUSD','EURUSD','GBPUSD','BTCUSD','ETHUSD','AAPL','TSLA','SPY','QQQ','US30','NAS100']))
+    prefill = request.args.get('strategy', '')
+    if request.method == 'POST':
+        run = BacktestRun(user_id=current_user.id, strategy_name=request.form['strategy'], symbol=request.form['symbol'].upper(), timeframe=request.form['timeframe'], date_from=datetime.strptime(request.form['date_from'],'%Y-%m-%d').date(), date_to=datetime.strptime(request.form['date_to'],'%Y-%m-%d').date(), parameters=json.dumps({'size_mode':request.form.get('size_mode','fixed'),'size_value':float(request.form.get('size_value',0.1)),'commission':float(request.form.get('commission',0)),'slippage':float(request.form.get('slippage',0.5))}), status='pending')
+        db.session.add(run)
+        db.session.commit()
+        return redirect(url_for('backtest_run', run_id=run.id))
+    return render_template('strategy_backtest.html', symbols=symbols, templates=ICTTEMPLATES, prefill=prefill)
+
+@app.route('/backtest/run/<int:run_id>')
+@login_required
+def backtest_run(run_id):
+    run = BacktestRun.query.get_or_404(run_id)
+    if run.user_id != current_user.id:
+        return redirect(url_for('backtest_new'))
+    return render_template('backtest_results.html', run=run)
+
+@app.route('/api/backtest/execute/<int:run_id>', methods=['POST'])
+@login_required
+def backtest_execute(run_id):
+    run = BacktestRun.query.get_or_404(run_id)
+    if run.user_id != current_user.id:
+        return jsonify({'error': 'unauthorized'}), 403
+    run.status = 'running'
+    db.session.commit()
+    import backtest_engine
+    def _run():
+        with app.app_context():
+            r = BacktestRun.query.get(run_id)
+            try:
+                res = backtest_engine.run_simulation(r)
+                r.status = 'done'
+                r.total_trades = res['total_trades']
+                r.win_rate = res['win_rate']
+                r.profit_factor = res['profit_factor']
+                r.avg_r = res['avg_r']
+                r.total_pnl = res['total_pnl']
+                r.max_drawdown_pct = res['max_drawdown_pct']
+                r.max_drawdown_dollar = res['max_drawdown_dollar']
+                r.sharpe = res['sharpe']
+                r.sortino = res['sortino']
+                r.expectancy = res['expectancy']
+                r.recovery_factor = res['recovery_factor']
+                r.calmar = res['calmar']
+                r.equity_curve = json.dumps(res['equity_curve'])
+                r.drawdown_series = json.dumps(res['drawdown_series'])
+                r.monthly_returns = json.dumps(res['monthly_returns'])
+                r.wisdom_score = res.get('wisdom_score', 50)
+                for t in res['trades']:
+                    db.session.add(BacktestTrade(run_id=run_id, **t))
+                db.session.commit()
+            except Exception as e:
+                r.status = 'failed'
+                r.win_rate = -1
+                db.session.commit()
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({'status': 'started'})
+
+@app.route('/api/backtest/status/<int:run_id>')
+@login_required
+def backtest_status(run_id):
+    run = BacktestRun.query.get_or_404(run_id)
+    return jsonify({'status': run.status, 'win_rate': run.win_rate, 'total_trades': run.total_trades, 'profit_factor': run.profit_factor})
+
+@app.route('/api/backtest/results/<int:run_id>')
+@login_required
+def backtest_results_api(run_id):
+    run = BacktestRun.query.get_or_404(run_id)
+    if run.user_id != current_user.id:
+        return jsonify({'error': 'unauthorized'}), 403
+    trades = BacktestTrade.query.filter_by(run_id=run.id).order_by(BacktestTrade.entry_date).all()
+    return jsonify({
+        'run': {'strategy_name':run.strategy_name,'symbol':run.symbol,'timeframe':run.timeframe,'total_trades':run.total_trades,'win_rate':run.win_rate,'profit_factor':run.profit_factor,'avg_r':run.avg_r,'total_pnl':run.total_pnl,'max_drawdown_pct':run.max_drawdown_pct,'max_drawdown_dollar':run.max_drawdown_dollar,'sharpe':run.sharpe,'sortino':run.sortino,'expectancy':run.expectancy,'recovery_factor':run.recovery_factor,'calmar':run.calmar,'equity_curve':json.loads(run.equity_curve or '[]'),'drawdown_series':json.loads(run.drawdown_series or '[]'),'wisdom_score':run.wisdom_score},
+        'trades': [{'entry_date':t.entry_date.isoformat() if t.entry_date else None,'exit_date':t.exit_date.isoformat() if t.exit_date else None,'direction':t.direction,'entry_price':t.entry_price,'exit_price':t.exit_price,'pnl':t.pnl,'r_multiple':t.r_multiple,'result':t.result} for t in trades],
+    })
+
+@app.route('/trade/replay/<int:trade_id>')
+@login_required
+def trade_replay(trade_id):
+    trade = Trade.query.get_or_404(trade_id)
+    if trade.user_id != current_user.id:
+        return redirect(url_for('trades'))
+    return render_template('trade_replay.html', trade=trade)
+
+@app.route('/api/replay/candles/<int:trade_id>')
+@login_required
+def replay_candles(trade_id):
+    trade = Trade.query.get_or_404(trade_id)
+    if trade.user_id != current_user.id:
+        return jsonify({'error': 'unauthorized'}), 403
+    cache = ReplayCache.query.filter_by(trade_id=trade_id).first()
+    if cache and cache.status == 'done' and cache.candle_data:
+        return jsonify({'candles': json.loads(cache.candle_data), 'trade': trade.to_dict()})
+    import backtest_engine
+    sym = trade.symbol
+    fm = {'XAUUSD':'GC=F','XAGUSD':'SI=F','US30':'YM=F','NAS100':'NQ=F','SPX500':'ES=F','BTCUSD':'BTC-USD','ETHUSD':'ETH-USD'}
+    yfsym = fm.get(sym, sym)
+    df = yf.download(yfsym, start=(trade.entry_date-timedelta(days=2)).strftime('%Y-%m-%d'), end=(trade.exit_date+timedelta(days=2)).strftime('%Y-%m-%d') if trade.exit_date else (trade.entry_date+timedelta(days=1)).strftime('%Y-%m-%d'), interval='5m', progress=False)
+    candles = []
+    if not df.empty:
+        for idx,row in df.iterrows():
+            candles.append({'time':idx.to_pydatetime().isoformat(),'open':float(row['Open']),'high':float(row['High']),'low':float(row['Low']),'close':float(row['Close']),'volume':float(row['Volume'])})
+    if not cache:
+        cache = ReplayCache(trade_id=trade_id, candle_data=json.dumps(candles), status='done')
+        db.session.add(cache)
+    else:
+        cache.candle_data = json.dumps(candles)
+        cache.status = 'done'
+    db.session.commit()
+    return jsonify({'candles': candles, 'trade': trade.to_dict()})
+
+# ─── AI ORACLE ─────────────────────────────────────────
+
+@app.route('/oracle')
+@login_required
+def oracle():
+    trades = Trade.query.filter_by(user_id=current_user.id).order_by(Trade.entry_date.desc()).all()
+    today_trades = [t for t in trades if t.entry_date and t.entry_date.date() == date.today()]
+    week_trades = [t for t in trades if t.entry_date and (date.today()-t.entry_date.date()).days < 7]
+    today_wins = len([t for t in today_trades if t.result == 'WIN'])
+    today_losses = len([t for t in today_trades if t.result == 'LOSS'])
+    today_pnl = sum(t.pnl or 0 for t in today_trades)
+    week_wins = len([t for t in week_trades if t.result == 'WIN'])
+    week_losses = len([t for t in week_trades if t.result == 'LOSS'])
+    week_wr = week_wins/(week_wins+week_losses)*100 if (week_wins+week_losses)>0 else 0
+    cons_losses = 0
+    for t in trades[:20]:
+        if t.result == 'LOSS': cons_losses += 1
+        else: break
+    wr = len([t for t in trades if t.result=='WIN'])/len(trades)*100 if trades else 0
+    avg_r = sum(t.r_multiple or 0 for t in trades)/len(trades) if trades else 0
+    total_pnl = sum(t.pnl or 0 for t in trades)
+    setup_pnl = {}
+    for t in trades[:50]:
+        if t.setup_type: setup_pnl[t.setup_type] = setup_pnl.get(t.setup_type,0)+(t.pnl or 0)
+    best_setup = max(setup_pnl, key=setup_pnl.get) if setup_pnl else None
+    insights = OracleInsight.query.filter_by(user_id=current_user.id).order_by(OracleInsight.created_at.desc()).limit(10).all()
+    return render_template('oracle.html', today_trades=len(today_trades), today_wins=today_wins, today_losses=today_losses, today_pnl=round(today_pnl,2), week_wr=round(week_wr,1), cons_losses=cons_losses, wr=round(wr,1), avg_r=round(avg_r,2), total_pnl=round(total_pnl,2), best_setup=best_setup, trade_count=len(trades), insights=insights)
+
+@app.route('/api/oracle/chat', methods=['POST'])
+@login_required
+def oracle_chat():
+    data = request.get_json()
+    q = (data.get('message','') or '').lower()
+    trades = Trade.query.filter_by(user_id=current_user.id).order_by(Trade.entry_date.desc()).limit(100).all()
+    if not trades:
+        return jsonify({'response':'You have no trades yet. Take your first trade and I will guide you.'})
+    total=len(trades); wins=len([t for t in trades if t.result=='WIN']); losses=len([t for t in trades if t.result=='LOSS'])
+    wr=wins/total*100 if total else 0; avg_r=sum(t.r_multiple or 0 for t in trades)/total if total else 0; tp=sum(t.pnl or 0 for t in trades)
+    best=max(trades, key=lambda t: t.pnl or 0); worst=min(trades, key=lambda t: t.pnl or 0)
+    sp={}; [sp.update({t.setup_type:sp.get(t.setup_type,0)+(t.pnl or 0)}) for t in trades if t.setup_type]
+    bsetup=max(sp,key=sp.get) if sp else 'N/A'; wsetup=min(sp,key=sp.get) if sp else 'N/A'
+
+    if 'grade' in q or 'rate' in q:
+        g='A' if wr>=70 else 'B' if wr>=60 else 'C' if wr>=50 else 'D'
+        resp=f"**Overall Grade: {g}** ({wr:.0f}% WR)\n\n📊 Stats:\n• Trades: {total}\n• Win Rate: {wr:.0f}%\n• Avg R: {avg_r:.2f}\n• Total P&L: ${tp:.2f}\n• Best Setup: {bsetup} (${sp[bsetup]:.2f})\n• Worst Setup: {wsetup} (${sp[wsetup]:.2f})\n\n🎯 Best trade: ${best.pnl:.2f} — study that entry.\n❌ Worst setup {wsetup} lost ${abs(sp[wsetup]):.2f}."
+        if losses>wins: resp+="\n\n⚠️ You lose more than you win. Cut losses early."
+    elif 'improve' in q or 'weak' in q:
+        resp=f"Your biggest leak: **{worst.setup_type or 'Unknown'}** (${abs(worst.pnl or 0):.2f}).\n\nLivermore: 'The loss is taken. Don't turn it into a catastrophe.'\nSeykota: 'The system is perfect. You aren't following it.'\n\nDrill: paper trade that setup for 10 entries."
+    elif 'future' in q or 'predict' in q or 'project' in q:
+        resp=f"Next 10 trades: ${(avg_r*10*0.6):.2f}\nMonthly: ${(tp*4/max(1,total/10)):.2f}\nRisk: {max(5,30-wr):.0f}% chance of -10% drawdown.\n\n⚠️ Not financial advice."
+    elif 'drill' in q or 'coach' in q or 'practice' in q:
+        resp=f"**7-Day Protocol:**\nDay 1-3: Demo {wsetup} — 10 entries, full checklist.\nDay 4-5: Half size until WR>50%.\nDay 6-7: Full size, grade every trade.\n\nSeykota: 'Elements: cut losses, ride winners, keep bets small.'"
+    elif 'tilt' in q or 'emotion' in q:
+        et=[t for t in trades if t.emotion]; tc=sum(1 for t in et if t.emotion.lower() in ['angry','frustrated','revenge','greed'])
+        resp=f"Emotional Analysis:\n• Tagged trades: {len(et)}/{total}\n• Tilt events: {tc}\n• Tudor Jones: 'Secret is losing little when wrong.'"
+    elif 'livermore' in q or 'seykota' in q or 'quote' in q:
+        import random
+        quotes=["'The market never lies. People lie.' — Jesse Livermore","'The trend is your friend until the end.' — Ed Seykota","'Cut losses, let winners run.' — William Eckhardt","'Losers average losers.' — Paul Tudor Jones","'Be right and sit tight.' — Jesse Livermore","'Risk no more than 1% per trade.' — Larry Hite"]
+        resp=random.choice(quotes)
+    else:
+        resp=f"I am your 300-year market intelligence.\n📈 {total} trades | {wr:.0f}% WR | {avg_r:.2f}R | ${tp:.2f}\n\nAsk: grade, improve, predict, drill, tilt, quote"
+    db.session.add(OracleInsight(user_id=current_user.id, insight_type='chat', title=q[:100], content=resp[:500], score=int(wr)))
+    db.session.commit()
+    return jsonify({'response': resp})
+
+@app.route('/api/oracle/tilt-check')
+@login_required
+def oracle_tilt_check():
+    trades = Trade.query.filter_by(user_id=current_user.id).order_by(Trade.entry_date.desc()).limit(5).all()
+    cons = 0
+    for t in trades:
+        if t.result == 'LOSS': cons += 1
+        else: break
+    recent_pnl = sum(t.pnl or 0 for t in trades)
+    return jsonify({'tilt_detected': cons >= 3, 'consecutive_losses': cons, 'recent_pnl': round(recent_pnl,2), 'message': '⚠️ Tilt detected. Step away.' if cons>=3 else '✅ You look clear. Keep trading.'})
+
+# ─── REPORTS ──────────────────────────────────────────
+
+@app.route('/reports')
+@login_required
+def reports():
+    trades = Trade.query.filter_by(user_id=current_user.id).order_by(Trade.entry_date.desc()).all()
+    return render_template('reports.html', trades=trades)
+
+@app.route('/api/reports/csv')
+@login_required
+def reports_csv():
+    trades = Trade.query.filter_by(user_id=current_user.id).order_by(Trade.entry_date.desc()).all()
+    si = io.StringIO()
+    cw = csv.writer(si)
+    cw.writerow(['Symbol','Direction','Entry','Exit','Quantity','P&L','R Multiple','Result','Setup','Session','Emotion','Entry Date','Exit Date'])
+    for t in trades:
+        cw.writerow([t.symbol, t.direction, t.entry_price, t.exit_price, t.quantity, t.pnl, t.r_multiple, t.result, t.setup_type, t.session, t.emotion, t.entry_date, t.exit_date])
+    return Response(si.getvalue().encode('utf-8'), mimetype='text/csv', headers={'Content-Disposition':'attachment;filename=trades.csv'})
 
 # ─── AI REVIEW ───────────────────────────────────────────
 

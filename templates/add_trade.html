@@ -71,8 +71,8 @@
         <label>Setup</label>
         <select name="setup_type">
           <option value="">Select</option>
-          {% for s in ['FVG','OB','LQ','MSB','CISD','FIF','IFVG','BB','J order','Order Flow','Supply/Demand','Trend','Reversal','Breakout','Other'] %}
-          <option value="{{ s }}" {{ 'selected' if trade and trade.setup_type == s }}>{{ s }}</option>
+          {% for s in ['FVG (Fair Value Gap)','Order Block (OB)','Liquidity Grab','Killzone Strategy','Silver Bullet','Breaker Block','FVG','OB','LQ','MSB','CISD','FIF','IFVG','BB','J order','Order Flow','Supply/Demand','Trend','Reversal','Breakout','Other'] %}
+          <option value="{{ s }}" {{ 'selected' if trade and trade.setup_type == s or setup_type == s }}>{{ s }}</option>
           {% endfor %}
         </select>
       </div>

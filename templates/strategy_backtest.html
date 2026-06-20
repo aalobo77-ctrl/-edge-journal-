@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Backtest Strategy{% endblock %}
+{% block page_title %}⚡ Backtest Engine{% endblock %}
+{% block content %}
+<form method="POST" style="display:flex;flex-direction:column;gap:16px;">
+  <div class="two-col">
+    <div class="card">
+      <div class="card-header"><span class="card-title">Strategy</span></div>
+      <div class="fg"><label>Strategy</label><select name="strategy">{% for t in templates %}<option value="{{ t['name'] }}" {{ 'selected' if prefill==t['name'] }}>{{ t['name'] }}</option>{% endfor %}</select></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Instrument</span></div>
+      <div class="fg"><label>Symbol</label><select name="symbol" id="sym-sel" style="width:100%;">{% for s in symbols %}<option value="{{ s }}">{{ s }}</option>{% endfor %}<option value="__other__">Other...</option></select><input type="text" id="sym-custom" name="symbol_custom" placeholder="Enter symbol..." style="display:none;margin-top:6px;width:100%;" /></div>
+    </div>
+  </div>
+  <div class="two-col">
+    <div class="card">
+      <div class="card-header"><span class="card-title">Date Range</span></div>
+      <div class="fg"><label>From</label><input type="date" name="date_from" required /></div>
+      <div class="fg"><label>To</label><input type="date" name="date_to" required /></div>
+      <div class="fg"><label>Timeframe</label><select name="timeframe"><option value="1m">1 Min</option><option value="5m" selected>5 Min</option><option value="15m">15 Min</option><option value="1h">1 Hour</option><option value="4h">4 Hours</option><option value="1d">Daily</option></select></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Risk Settings</span></div>
+      <div class="fg"><label>Size Mode</label><select name="size_mode"><option value="fixed">Fixed Lots</option><option value="risk_pct">% Risk</option></select></div>
+      <div class="fg"><label>Size / Risk %</label><input type="number" name="size_value" step="0.01" value="0.1" /></div>
+      <div class="fg"><label>Commission ($)</label><input type="number" name="commission" step="0.01" value="3.50" /></div>
+      <div class="fg"><label>Slippage (pips)</label><input type="number" name="slippage" step="0.1" value="0.5" /></div>
+    </div>
+  </div>
+  <button type="submit" class="btn btn-primary" style="padding:14px;font-size:16px;">⚡ Start Backtest</button>
+</form>
+<script>
+document.getElementById('sym-sel').addEventListener('change', function() {
+  const c = document.getElementById('sym-custom');
+  c.style.display = this.value === '__other__' ? 'block' : 'none';
+  c.name = this.value === '__other__' ? 'symbol' : '';
+});
+</script>
+{% endblock %}

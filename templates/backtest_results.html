@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Backtest Results{% endblock %}
+{% block page_title %}Backtest: {{ run.strategy_name }}{% endblock %}
+{% block content %}
+<div id="bt-status" style="text-align:center;padding:40px;">
+  <div style="width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--purple);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px;"></div>
+  <p>Running backtest on {{ run.symbol }} {{ run.timeframe }}...</p>
+</div>
+<div id="bt-results" style="display:none;">
+  <div id="bt-kpis" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;"></div>
+  <div class="two-col" style="margin-top:16px;">
+    <div class="card"><div class="card-header"><span class="card-title">Equity Curve</span></div><canvas id="eqChart" height="220"></canvas></div>
+    <div class="card"><div class="card-header"><span class="card-title">Drawdown</span></div><canvas id="ddChart" height="220"></canvas></div>
+  </div>
+  <div class="card" style="margin-top:16px;">
+    <div class="card-header"><span class="card-title">Trades</span></div>
+    <table class="trade-table"><thead><tr><th>#</th><th>Date</th><th>Dir</th><th>Entry</th><th>Exit</th><th>P&L</th><th>R</th><th>Result</th></tr></thead><tbody id="bt-trades"></tbody></table>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const rid = {{ run.id }};
+function poll() { fetch(`/api/backtest/status/${rid}`).then(r=>r.json()).then(d => { if(d.status==='done') loadRes(); else if(d.status==='failed') document.getElementById('bt-status').innerHTML='<p style="color:var(--red);">Failed.</p>'; else setTimeout(poll,2000); }); }
+function loadRes() {
+  fetch(`/api/backtest/results/${rid}`).then(r=>r.json()).then(d => {
+    document.getElementById('bt-status').style.display='none';
+    document.getElementById('bt-results').style.display='block';
+    const r = d.run;
+    document.getElementById('bt-kpis').innerHTML = [['Win Rate',r.win_rate+'%'],['P.Factor',r.profit_factor],['Avg R',r.avg_r],['P&L','$'+r.total_pnl],['Max DD',r.max_drawdown_pct+'%'],['Sharpe',r.sharpe],['Trades',r.total_trades],['Exp.',r.expectancy]].map(m => `<div class="kpi-card" style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center;"><div style="font-size:18px;font-weight:700;font-family:var(--mono);">${m[1]}</div><div style="font-size:11px;color:var(--dim);margin-top:2px;">${m[0]}</div></div>`).join('');
+    if(r.equity_curve.length) new Chart(document.getElementById('eqChart'),{type:'line',data:{labels:r.equity_curve.map(e=>e.time.slice(0,10)),datasets:[{label:'Equity',data:r.equity_curve.map(e=>e.equity),borderColor:'#7c5cfc',fill:false,tension:.3}]},options:{responsive:true,plugins:{legend:{display:false}}}});
+    if(r.drawdown_series.length) new Chart(document.getElementById('ddChart'),{type:'line',data:{labels:r.drawdown_series.map(e=>e.time.slice(0,10)),datasets:[{label:'DD%',data:r.drawdown_series.map(e=>e.dd),borderColor:'#ef4444',fill:true,backgroundColor:'rgba(239,68,68,.1)',tension:.3}]},options:{responsive:true,plugins:{legend:{display:false}}}});
+    document.getElementById('bt-trades').innerHTML = d.trades.map((t,i) => `<tr class="${t.result==='WIN'?'row-win':'row-loss'}"><td>${i+1}</td><td>${(t.entry_date||'').slice(0,10)}</td><td>${t.direction}</td><td>${t.entry_price}</td><td>${t.exit_price}</td><td>$${t.pnl}</td><td>${t.r_multiple}R</td><td><span class="trade-tag" style="background:${t.result==='WIN'?'var(--green-bg)':'var(--red-bg)'};color:${t.result==='WIN'?'var(--green)':'var(--red)'}">${t.result}</span></td></tr>`).join('');
+  });
+}
+setTimeout(poll,1000);
+</script>
+<style>@keyframes spin{to{transform:rotate(360deg)}}.row-win{border-left:3px solid var(--green)}.row-loss{border-left:3px solid var(--red)}</style>
+{% endblock %}

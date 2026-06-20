@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ template['name'] }}{% endblock %}
+{% block page_title %}{{ template['name'] }}{% endblock %}
+{% block content %}
+<div class="two-col">
+  <div class="card">
+    <div class="card-header"><span class="card-title">Overview</span></div>
+    <p style="font-size:14px;line-height:1.7;margin-bottom:12px;">{{ template['description'] }}</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <span class="trade-tag">{{ template['category'] }}</span>
+      <span class="trade-tag">{{ template['timeframe'] }}</span>
+      <span class="trade-tag">{{ template['session'] }}</span>
+      <span class="trade-tag">{{ template['direction'] }}</span>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Quick Apply</span></div>
+    <form method="POST" action="{{ url_for('add_trade') }}" style="display:flex;flex-direction:column;gap:8px;">
+      <input type="hidden" name="setup_type" value="{{ template['name'] }}" />
+      <p class="dim" style="font-size:13px;">Log a trade with this strategy pre-selected.</p>
+      <a href="{{ url_for('add_trade') }}?setup={{ template['name'] }}" class="btn btn-primary" style="text-align:center;">Log Trade with {{ template['name'] }}</a>
+    </form>
+  </div>
+</div>
+
+<div class="two-col">
+  <div class="card">
+    <div class="card-header"><span class="card-title">Entry Criteria</span></div>
+    <pre style="font-family:var(--mono);font-size:12px;line-height:1.7;color:var(--text2);white-space:pre-wrap;">{{ template['entry_criteria'] }}</pre>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Exit Criteria</span></div>
+    <pre style="font-family:var(--mono);font-size:12px;line-height:1.7;color:var(--text2);white-space:pre-wrap;">{{ template['exit_criteria'] }}</pre>
+  </div>
+</div>
+
+<div class="two-col">
+  <div class="card">
+    <div class="card-header"><span class="card-title">Risk Rules</span></div>
+    <pre style="font-family:var(--mono);font-size:12px;line-height:1.7;color:var(--text2);white-space:pre-wrap;">{{ template['risk_rules'] }}</pre>
+  </div>
+  <div class="card" style="border-left:3px solid var(--purple);">
+    <div class="card-header"><span class="card-title">Pre-Trade Checklist</span></div>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      {% for item in template['checklist'].split('\n') %}
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:4px 0;">
+        <input type="checkbox" style="accent-color:var(--purple);width:16px;height:16px;" />
+        <span>{{ item }}</span>
+      </label>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><span class="card-title">Trade This Strategy</span></div>
+  <div style="display:flex;gap:8px;">
+    <a href="{{ url_for('add_trade') }}?setup={{ template['name'] }}" class="btn btn-primary" style="flex:1;text-align:center;">Log Trade →</a>
+    <a href="{{ url_for('backtest_new') }}?strategy={{ template['name'] }}" class="btn btn-outline" style="flex:1;text-align:center;">⚡ Backtest</a>
+  </div>
+</div>
+
+<style>
+pre { margin:0; }
+input[type="checkbox"]:checked + span { text-decoration:line-through; opacity:0.6; }
+</style>
+{% endblock %}

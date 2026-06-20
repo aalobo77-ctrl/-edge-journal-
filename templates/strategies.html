@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Strategies{% endblock %}
+{% block page_title %}Strategy Templates{% endblock %}
+{% block header_actions %}
+<div class="tb-actions">
+  <a href="{{ url_for('add_trade') }}" class="btn btn-primary btn-sm">+ Log Trade</a>
+</div>
+{% endblock %}
+{% block content %}
+<p class="dim" style="margin-bottom:16px;">Pre-built ICT/SMC strategies with trade checklists. Apply one to your next trade.</p>
+
+<div class="card" style="padding:0;">
+  {% for t in templates %}
+  <div style="padding:16px 20px;border-bottom:1px solid var(--border);">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div style="width:36px;height:36px;border-radius:8px;background:var(--purple-bg);color:var(--purple);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;">{{ t['name'][:2] }}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:14px;font-weight:600;">{{ t['name'] }}</div>
+        <div style="font-size:12px;color:var(--dim);margin-top:2px;">{{ t['description'][:120] }}{% if t['description']|length > 120 %}...{% endif %}</div>
+        <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
+          <span class="trade-tag">{{ t['category'] }}</span>
+          <span class="trade-tag">{{ t['timeframe'] }}</span>
+          <span class="trade-tag">{{ t['session'] }}</span>
+          <span class="trade-tag" style="{% if t['direction'] == 'LONG' %}color:var(--green);background:var(--green-bg);{% elif t['direction'] == 'SHORT' %}color:var(--red);background:var(--red-bg);{% else %}color:var(--text2);background:var(--card3);{% endif %}">{{ t['direction'] }}</span>
+        </div>
+      </div>
+      <a href="{{ url_for('strategy_apply', name=t['name']) }}" class="btn btn-primary btn-sm">View</a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

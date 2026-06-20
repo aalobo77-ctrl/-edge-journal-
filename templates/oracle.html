@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}AI Oracle{% endblock %}
+{% block page_title %}🧠 The Oracle{% endblock %}
+{% block content %}
+<div class="card" style="border-left:3px solid var(--purple);margin-bottom:16px;">
+  <div class="card-header"><span class="card-title">📋 Today's Briefing</span></div>
+  <div style="font-size:13px;line-height:1.9;">
+    <div>👋 Good morning. I've analyzed <strong>{{ trade_count }}</strong> trades across your history.</div>
+    {% if today_trades > 0 %}
+    <div>📊 Today: <span style="color:var(--green);">{{ today_wins }}W</span> / <span style="color:var(--red);">{{ today_losses }}L</span> | P&L: <strong>${{ today_pnl }}</strong></div>
+    {% else %}<div>📊 No trades yet today.</div>{% endif %}
+    {% if week_wr >= 70 %}<div>🔥 Weekly win rate: <strong>{{ week_wr }}%</strong> — you're in the zone.</div>{% elif week_wr >= 50 %}<div>📈 Weekly: <strong>{{ week_wr }}%</strong> — steady.</div>{% else %}<div>⚡ Weekly: <strong>{{ week_wr }}%</strong> — review your setups.</div>{% endif %}
+    {% if cons_losses >= 3 %}<div>⚠️ TILT ALERT: {{ cons_losses }} consecutive losses. Step away.</div>{% elif cons_losses == 2 %}<div>👀 Two consecutive losses. Stay disciplined.</div>{% endif %}
+    {% if best_setup %}<div>🏆 Best setup: <strong>{{ best_setup }}</strong></div>{% endif %}
+    <div>📈 Overall: <strong>{{ wr }}%</strong> WR | <strong>{{ avg_r }}R</strong> avg | <strong>${{ total_pnl }}</strong> total</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><span class="card-title">💬 Ask the Oracle</span></div>
+  <div id="oracle-chat" style="max-height:400px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px 0;"></div>
+  <div style="display:flex;gap:8px;margin-top:8px;">
+    <input type="text" id="oracle-input" placeholder="Ask... (grade my trades, improve, predict, drill, tilt, quote)" style="flex:1;" />
+    <button class="btn btn-primary" id="oracle-send">Ask</button>
+  </div>
+  <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+    <button class="btn btn-sm btn-outline quick-q">Grade my trades</button>
+    <button class="btn btn-sm btn-outline quick-q">What should I improve?</button>
+    <button class="btn btn-sm btn-outline quick-q">Predict my future</button>
+    <button class="btn btn-sm btn-outline quick-q">Give me a drill</button>
+    <button class="btn btn-sm btn-outline quick-q">Analyze my tilt</button>
+    <button class="btn btn-sm btn-outline quick-q">Give me a quote</button>
+  </div>
+</div>
+
+{% if insights %}
+<div class="card" style="margin-top:16px;">
+  <div class="card-header"><span class="card-title">📜 Past Insights</span></div>
+  {% for ins in insights %}
+  <div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">
+    <div style="font-weight:600;">{{ ins.title[:100] }}</div>
+    <div class="dim">{{ ins.content[:200] }}...</div>
+    <div class="dim" style="font-size:11px;">{{ ins.created_at.strftime('%b %d, %H:%M') }}</div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+  const inp=document.getElementById('oracle-input'),btn=document.getElementById('oracle-send'),chat=document.getElementById('oracle-chat');
+  function add(m,u){const d=document.createElement('div');d.style.cssText=`padding:10px 14px;border-radius:8px;font-size:13px;line-height:1.6;max-width:85%;${u?'align-self:flex-end;background:var(--purple-bg);color:var(--purple);':'align-self:flex-start;background:var(--card3);color:var(--text2);'}`;d.innerHTML=m.replace(/\n/g,'<br>');chat.appendChild(d);chat.scrollTop=chat.scrollHeight;}
+  function ask(m){add(m,true);const l=document.createElement('div');l.textContent='...';l.style.cssText='padding:8px;font-size:13px;color:var(--dim);';chat.appendChild(l);
+    fetch('/api/oracle/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:m})}).then(r=>r.json()).then(d=>{l.remove();add(d.response,false);}).catch(()=>{l.remove();add('The Oracle is silent.',false);});}
+  btn.onclick=()=>{const m=inp.value.trim();if(!m)return;inp.value='';ask(m);};
+  inp.onkeydown=e=>{if(e.key==='Enter')btn.click();};
+  document.querySelectorAll('.quick-q').forEach(b=>b.onclick=()=>ask(b.textContent));
+  setTimeout(()=>add('I am your 300-year market intelligence. Ask me anything.',false),300);
+});
+</script>
+{% endblock %}

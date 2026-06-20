@@ -240,4 +240,16 @@ if (ctx) {
   });
 }
 </script>
+
+<div class="card" style="border-left:3px solid var(--purple);margin-top:20px;">
+  <div class="card-header"><span class="card-title">🧠 Oracle Insight</span></div>
+  <div id="oracle-feed" style="font-size:13px;line-height:1.7;color:var(--text2);">Loading...</div>
+</div>
+<script>
+fetch('/api/oracle/tilt-check').then(r=>r.json()).then(d => {
+  document.getElementById('oracle-feed').innerHTML = d.tilt_detected
+    ? `<span style="color:var(--red);font-weight:600;">⚠️ ${d.message}</span> (${d.consecutive_losses} consecutive losses)`
+    : `<span style="color:var(--green);">${d.message}</span> Recent P&L: $${d.recent_pnl}`;
+});
+</script>
 {% endblock %}

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Trade Replay{% endblock %}
+{% block page_title %}Trade Replay · {{ trade.symbol }}{% endblock %}
+{% block content %}
+<div class="card" style="padding:0;overflow:hidden;">
+  <canvas id="replayChart" height="380" style="width:100%;"></canvas>
+</div>
+<div style="display:flex;align-items:center;gap:16px;margin:12px 0;flex-wrap:wrap;">
+  <div style="display:flex;gap:4px;">
+    <button class="btn btn-sm btn-outline" id="btn-first">⏮</button>
+    <button class="btn btn-sm btn-outline" id="btn-prev">◀</button>
+    <button class="btn btn-sm btn-primary" id="btn-play">▶ Play</button>
+    <button class="btn btn-sm btn-outline" id="btn-next">▶</button>
+    <button class="btn btn-sm btn-outline" id="btn-last">⏭</button>
+  </div>
+  <select id="speed-select" style="width:70px;"><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option><option value="4">4x</option></select>
+  <span style="font-size:12px;color:var(--dim);flex:1;text-align:right;">Candle <span id="candle-num">0</span>/<span id="candle-total">0</span></span>
+</div>
+<div class="two-col">
+  <div class="card">
+    <div class="card-header"><span class="card-title">Trade Details</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px;">
+      <span class="dim">Symbol</span><span style="font-weight:600;">{{ trade.symbol }}</span>
+      <span class="dim">Direction</span><span style="font-weight:600;color:{% if trade.direction=='LONG' %}var(--green){% else %}var(--red){% endif %};">{{ trade.direction }}</span>
+      <span class="dim">Entry</span><span style="font-weight:600;">${{ trade.entry_price }}</span>
+      <span class="dim">Exit</span><span style="font-weight:600;">${{ trade.exit_price }}</span>
+      <span class="dim">P&L</span><span style="font-weight:600;color:{% if trade.pnl and trade.pnl>0 %}var(--green){% else %}var(--red){% endif %};">${{ trade.pnl or 0 }}</span>
+      <span class="dim">R</span><span style="font-weight:600;">{{ trade.r_multiple or 0 }}R</span>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">AI Commentary</span></div>
+    <div id="commentary" style="font-size:13px;line-height:1.7;min-height:60px;color:var(--text2);">Press Play to start replay.</div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let candles=[], trade={{ trade.to_dict()|tojson }}, ci=0, playing=false, interval=null, chart=null;
+async function loadC() {
+  const r=await fetch(`/api/replay/candles/${trade.id}`), d=await r.json();
+  candles=d.candles||[]; renderC();
+}
+function renderC() {
+  const ctx=document.getElementById('replayChart');
+  if(!ctx||!candles.length) return;
+  const v=candles.slice(0,Math.max(20,ci+1)), l=v.map((_,i)=>i);
+  const bullish=v.map(c=>c.close>=c.open?c.close-c.open:0);
+  const bearish=v.map(c=>c.close<c.open?c.close-c.open:0);
+  chart=new Chart(ctx,{type:'bar',data:{labels:l,datasets:[{label:'B',data:bullish,backgroundColor:'#22c55e',borderWidth:0,barPercentage:.8},{label:'R',data:bearish,backgroundColor:'#ef4444',borderWidth:0,barPercentage:.8}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:(ctx)=>'$'+Math.abs(ctx.parsed.y).toFixed(2)}}},scales:{x:{display:false},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#888'}}}}});
+  document.getElementById('candle-total').textContent=candles.length;
+}
+function step() {
+  if(ci<candles.length-1){ci++;update();}
+  else stop();
+}
+function update() {
+  document.getElementById('candle-num').textContent=ci+1;
+  const c=candles[ci];
+  if(!c) return;
+  const d=c.close>c.open?'🟢 bullish':'🔴 bearish';
+  const html=`<span style="color:var(--purple);">Candle ${ci+1}:</span> ${d} — O:$${c.open.toFixed(2)} H:$${c.high.toFixed(2)} L:$${c.low.toFixed(2)} C:$${c.close.toFixed(2)}`;
+  document.getElementById('commentary').innerHTML=html;
+  renderC();
+}
+function start(){if(playing){stop();return;}
+playing=true;document.getElementById('btn-play').textContent='⏸ Pause';
+const speed=parseInt(document.getElementById('speed-select').value);
+interval=setInterval(step,Math.max(200,Math.round(1000/speed)));}
+function stop(){playing=false;clearInterval(interval);document.getElementById('btn-play').textContent='▶ Play';}
+document.addEventListener('DOMContentLoaded',()=>{
+  document.getElementById('btn-play').onclick=start;
+  document.getElementById('btn-next').onclick=step;
+  document.getElementById('btn-prev').onclick=()=>{if(ci>0){ci--;update();}};
+  document.getElementById('btn-first').onclick=()=>{ci=0;update();};
+  document.getElementById('btn-last').onclick=()=>{ci=candles.length-1;update();};
+  loadC();
+});
+</script>
+{% endblock %}

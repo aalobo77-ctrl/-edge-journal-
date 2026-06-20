@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Reports{% endblock %}
+{% block page_title %}Reports{% endblock %}
+{% block content %}
+<div class="two-col">
+  <div class="card">
+    <div class="card-header"><span class="card-title">📄 Export Trades</span></div>
+    <p class="dim" style="margin-bottom:12px;font-size:13px;">Download all {{ trades|length }} trades as CSV.</p>
+    <a href="{{ url_for('reports_csv') }}" class="btn btn-primary">⬇ Download CSV</a>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">📊 Quick Summary</span></div>
+    {% set wins = trades|selectattr('result','equalto','WIN')|list %}
+    {% set losses = trades|selectattr('result','equalto','LOSS')|list %}
+    {% set wr = (wins|length / trades|length * 100)|round(1) if trades|length > 0 else 0 %}
+    <div style="font-size:13px;line-height:2;">
+      <div>Total: <strong>{{ trades|length }}</strong></div>
+      <div>Win Rate: <strong>{{ wr }}%</strong></div>
+      <div>Wins: <strong style="color:var(--green);">{{ wins|length }}</strong> | Losses: <strong style="color:var(--red);">{{ losses|length }}</strong></div>
+      <div>Total P&L: <strong>${{ trades|sum(attribute='pnl')|round(2) }}</strong></div>
+      <div>Avg R: <strong>{{ (trades|sum(attribute='r_multiple')/trades|length)|round(2) if trades|length > 0 else 0 }}R</strong></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
