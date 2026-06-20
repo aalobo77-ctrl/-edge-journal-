@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Import Trades{% endblock %}
+{% block page_title %}Import Trades{% endblock %}
+{% block content %}
+<div class="page-narrow">
+  <div class="card">
+    <div class="card-header"><span class="card-title">Upload CSV</span></div>
+    <p class="dim" style="margin-bottom:12px;">Supports OANDA (Trade Closed) and Zerodha (tradebook) formats.</p>
+    <form method="POST" enctype="multipart/form-data">
+      <div class="fg">
+        <label>Broker</label>
+        <select name="broker" required>
+          <option value="oanda">OANDA</option>
+          <option value="zerodha">Zerodha / Kite</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>CSV File</label>
+        <input type="file" name="file" accept=".csv" required />
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%">Import</button>
+    </form>
+  </div>
+  {% if results %}
+  <div class="card">
+    <div class="card-header"><span class="card-title">Results</span></div>
+    <p style="margin-bottom:4px;">✅ {{ results.imported }} trades imported</p>
+    {% if results.skipped %}<p style="margin-bottom:4px;">⚠️ {{ results.skipped }} skipped</p>{% endif %}
+    {% if results.errors %}
+    <p>❌ {{ results.errors|length }} errors</p>
+    <ul class="err-list">
+      {% for e in results.errors %}<li>{{ e }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

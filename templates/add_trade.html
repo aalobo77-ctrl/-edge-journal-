@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit Trade' if trade else 'New Trade' }}{% endblock %}
+{% block page_title %}{{ 'Edit Trade' if trade else 'New Trade' }}{% endblock %}
+{% block content %}
+<div class="page-narrow card">
+  <form method="POST">
+    <div class="two-col">
+      <div class="fg">
+        <label>Symbol *</label>
+        <input type="text" name="symbol" list="symList" value="{{ trade.symbol if trade else '' }}" required />
+        <datalist id="symList">
+          <option value="XAUUSD"><option value="BTCUSD"><option value="EURUSD"><option value="GBPUSD"><option value="US500"><option value="US30"><option value="NAS100"><option value="USDJPY"><option value="ETHUSD"><option value="AAPL"><option value="TSLA"><option value="SPY"><option value="QQQ">
+        </datalist>
+      </div>
+      <div class="fg">
+        <label>Direction *</label>
+        <select name="direction" required>
+          <option value="LONG" {{ 'selected' if trade and trade.direction == 'LONG' }}>Long</option>
+          <option value="SHORT" {{ 'selected' if trade and trade.direction == 'SHORT' }}>Short</option>
+        </select>
+      </div>
+    </div>
+    <div class="two-col">
+      <div class="fg">
+        <label>Entry *</label>
+        <input type="number" step="any" name="entry_price" value="{{ trade.entry_price if trade else '' }}" required />
+      </div>
+      <div class="fg">
+        <label>Exit</label>
+        <input type="number" step="any" name="exit_price" value="{{ trade.exit_price if trade else '' }}" />
+      </div>
+    </div>
+    <div class="two-col">
+      <div class="fg">
+        <label>Qty</label>
+        <input type="number" step="any" name="quantity" value="{{ trade.quantity if trade else '' }}" />
+      </div>
+      <div class="fg">
+        <label>Fees</label>
+        <input type="number" step="0.01" name="fees" value="{{ trade.fees if trade else '0.00' }}" />
+      </div>
+    </div>
+    <div class="two-col">
+      <div class="fg">
+        <label>Stop Loss</label>
+        <input type="number" step="any" name="stop_loss" value="{{ trade.stop_loss if trade else '' }}" />
+      </div>
+      <div class="fg">
+        <label>Take Profit</label>
+        <input type="number" step="any" name="take_profit" value="{{ trade.take_profit if trade else '' }}" />
+      </div>
+    </div>
+    <div class="two-col">
+      <div class="fg">
+        <label>Entry Date *</label>
+        <input type="datetime-local" name="entry_date" value="{{ trade.entry_date.strftime('%Y-%m-%dT%H:%M') if trade else '' }}" required />
+      </div>
+      <div class="fg">
+        <label>Exit Date</label>
+        <input type="datetime-local" name="exit_date" value="{{ trade.exit_date.strftime('%Y-%m-%dT%H:%M') if trade and trade.exit_date else '' }}" />
+      </div>
+    </div>
+    <div class="fg">
+      <label>P&amp;L (manual override)</label>
+      <input type="number" step="0.01" name="pnl" value="{{ trade.pnl if trade else '' }}" />
+    </div>
+
+    <div class="card-title" style="margin:16px 0 10px;">Strategy</div>
+    <div class="two-col">
+      <div class="fg">
+        <label>Setup</label>
+        <select name="setup_type">
+          <option value="">Select</option>
+          {% for s in ['FVG','OB','LQ','MSB','CISD','FIF','IFVG','BB','J order','Order Flow','Supply/Demand','Trend','Reversal','Breakout','Other'] %}
+          <option value="{{ s }}" {{ 'selected' if trade and trade.setup_type == s }}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="fg">
+        <label>Session</label>
+        <select name="session">
+          <option value="">Select</option>
+          {% for s in ['Asian','London','NY AM','NY PM','London Close','Killzone AM','Killzone PM','Power Hour'] %}
+          <option value="{{ s }}" {{ 'selected' if trade and trade.session == s }}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="two-col">
+      <div class="fg">
+        <label>Tags</label>
+        <input type="text" name="tags" value="{{ trade.tags if trade else '' }}" placeholder="ict, london, 1m-fvg" />
+      </div>
+      <div class="fg">
+        <label>Emotion</label>
+        <select name="emotion">
+          <option value="">Select</option>
+          {% for e in ['Calm','Confident','Patient','Rushed','Revenge','Hesitant','Tired','Focused','Bored','Fearful','Greedy'] %}
+          <option value="{{ e }}" {{ 'selected' if trade and trade.emotion == e }}>{{ e }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="fg">
+      <label>Notes</label>
+      <textarea name="notes" rows="3">{{ trade.notes if trade else '' }}</textarea>
+    </div>
+    <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">{{ 'Update' if trade else 'Save Trade' }}</button>
+  </form>
+</div>
+{% endblock %}

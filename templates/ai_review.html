@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}AI Review{% endblock %}
+{% block page_title %}AI Trade Review{% endblock %}
+{% block content %}
+{% if total == 0 %}
+<div class="card"><p class="empty-state">No closed trades to review. <a href="{{ url_for('add_trade') }}">Log some trades first →</a></p></div>
+{% else %}
+<div class="two-col" style="margin-bottom:16px;">
+  <!-- Edge Score -->
+  <div class="edge-score-card">
+    <div class="edge-score-ring">
+      <svg width="100" height="100" viewBox="0 0 100 100">
+        <circle class="bg-circle" cx="50" cy="50" r="42" />
+        <circle class="fg-circle" id="reviewCircle" cx="50" cy="50" r="42"
+          stroke-dasharray="263.89" stroke-dashoffset="263.89" />
+      </svg>
+      <span class="edge-score-value" id="reviewScoreDisplay">0</span>
+    </div>
+    <div class="edge-score-meta">
+      <h3>Review Score</h3>
+      <p>Your current Edge Score based on {{ total }} closed trades.</p>
+      <div class="edge-score-metrics">
+        <div class="esm-item">WR <strong>{{ wr }}%</strong></div>
+        <div class="esm-item">PF <strong>{{ pf }}</strong></div>
+        <div class="esm-item">Avg R <strong>{{ avg_r }}</strong></div>
+        <div class="esm-item">P&amp;L <strong class="{% if total_pnl_ai >= 0 %}green{% else %}red{% endif %}">${{ "%.0f"|format(total_pnl_ai) }}</strong></div>
+      </div>
+    </div>
+  </div>
+  <!-- Summary -->
+  <div class="card" style="display:flex;flex-direction:column;justify-content:center;">
+    <div style="display:flex;gap:20px;flex-wrap:wrap;">
+      <div><span class="stat-tile-label">Total</span><span class="stat-tile-value" style="font-size:24px;">{{ total }}</span></div>
+      <div><span class="stat-tile-label">Wins</span><span class="stat-tile-value green">{{ wins }}</span></div>
+      <div><span class="stat-tile-label">Losses</span><span class="stat-tile-value red">{{ losses }}</span></div>
+      <div><span class="stat-tile-label">Win Rate</span><span class="stat-tile-value {% if wr >= 50 %}green{% else %}red{% endif %}">{{ wr }}%</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- AI Review Card -->
+<div class="card" style="border-left:3px solid var(--purple);">
+  <div class="card-header">
+    <span class="card-title">AI Analysis</span>
+    <span style="font-size:11px;color:var(--dim);">Auto-generated from your {{ total }} trades</span>
+  </div>
+  <p style="font-size:15px;line-height:1.7;color:var(--text);margin-bottom:16px;">{{ review }}</p>
+
+  <div class="card-title" style="margin-bottom:10px;">Patterns Detected</div>
+  {% if patterns %}
+  <div style="display:flex;flex-direction:column;gap:8px;">
+    {% for p in patterns %}
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;line-height:1.5;display:flex;align-items:flex-start;gap:8px;">
+      <span style="color:var(--purple);flex-shrink:0;margin-top:1px;">◆</span>
+      <span>{{ p }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="dim">Not enough data for pattern detection (need more trades).</p>
+  {% endif %}
+</div>
+
+<!-- Trading Tips -->
+<div class="card" style="margin-top:16px;">
+  <div class="card-header">
+    <span class="card-title">Personalized Tips</span>
+  </div>
+  <ul style="padding-left:18px;list-style:none;">
+    {% if wr < 40 %}
+    <li style="margin-bottom:8px;font-size:13px;">🔴 <strong>Win rate below 40%</strong> — Review your entry criteria. Are you trading low-probability setups?</li>
+    {% elif wr > 65 %}
+    <li style="margin-bottom:8px;font-size:13px;">🟢 <strong>Strong win rate</strong> — Consider increasing position size on your best setups.</li>
+    {% endif %}
+    {% if avg_r < 1 %}
+    <li style="margin-bottom:8px;font-size:13px;">🔴 <strong>Avg R below 1.0</strong> — You're cutting winners short. Let trades breathe to their targets.</li>
+    {% elif avg_r > 2 %}
+    <li style="margin-bottom:8px;font-size:13px;">🟢 <strong>Strong R-multiple</strong> — Your risk:reward management is solid. Keep doing this.</li>
+    {% endif %}
+    {% if pf < 1 %}
+    <li style="margin-bottom:8px;font-size:13px;">🔴 <strong>Profit factor below 1.0</strong> — You're losing more than you make overall. Review your strategy.</li>
+    {% elif pf > 2 %}
+    <li style="margin-bottom:8px;font-size:13px;">🟢 <strong>Profit factor above 2.0</strong> — Excellent risk management. This is what profitable traders look like.</li>
+    {% endif %}
+    {% if total_pnl_ai < 0 %}
+    <li style="margin-bottom:8px;font-size:13px;">🔴 <strong>Overall P&amp;L is negative</strong> — Consider switching to demo or reducing size until you're profitable.</li>
+    {% endif %}
+    {% if total >= 10 and total_pnl_ai > 0 %}
+    <li style="margin-bottom:8px;font-size:13px;">🟢 <strong>Profitable over {{ total }} trades</strong> — Statistical significance is building. Track what's working and double down.</li>
+    {% endif %}
+  </ul>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+const score = {{ score }};
+const circle = document.getElementById('reviewCircle');
+const display = document.getElementById('reviewScoreDisplay');
+if (circle && display) {
+  const c = 263.89;
+  const offset = c - (score / 100) * c;
+  requestAnimationFrame(() => {
+    circle.style.strokeDashoffset = c;
+    setTimeout(() => { circle.style.strokeDashoffset = offset; }, 100);
+  });
+  let cur = 0;
+  const step = Math.max(1, Math.ceil(score / 30));
+  const interval = setInterval(() => {
+    cur += step;
+    if (cur >= score) { cur = score; clearInterval(interval); }
+    display.textContent = cur;
+  }, 30);
+}
+</script>
+{% endblock %}

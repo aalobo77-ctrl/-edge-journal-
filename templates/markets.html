@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Markets{% endblock %}
+{% block content %}
+<div class="dashboard">
+  <div class="dash-header">
+    <h2>Markets</h2>
+    <span class="hint" style="font-size:0.75rem;color:var(--text2);">Updates every 30s</span>
+  </div>
+
+  <div class="markets-grid">
+    {% for sym, m in markets.items() %}
+    <div class="market-card">
+      <div class="mc-header">
+        <span class="mc-sym">{{ sym }}</span>
+        {% if m.price %}
+        <span class="mc-price">{{ "%.2f"|format(m.price) }}</span>
+        {% else %}
+        <span class="mc-price" style="color:var(--text2);">—</span>
+        {% endif %}
+      </div>
+      <div class="mc-details">
+        {% if m.change is not none %}
+        <div class="mc-row">
+          <span>Change</span>
+          <span class="{% if m.change >= 0 %}green{% else %}red{% endif %}">
+            {{ "%.2f"|format(m.change) }} ({{ "%.2f"|format(m.change_pct) }}%)
+          </span>
+        </div>
+        {% endif %}
+        {% if m.high %}
+        <div class="mc-row">
+          <span>Day High</span>
+          <span>{{ "%.2f"|format(m.high) }}</span>
+        </div>
+        {% endif %}
+        {% if m.low %}
+        <div class="mc-row">
+          <span>Day Low</span>
+          <span>{{ "%.2f"|format(m.low) }}</span>
+        </div>
+        {% endif %}
+        {% if m.bid %}
+        <div class="mc-row">
+          <span>Bid</span>
+          <span>{{ "%.2f"|format(m.bid) }}</span>
+        </div>
+        {% endif %}
+        {% if m.ask %}
+        <div class="mc-row">
+          <span>Ask</span>
+          <span>{{ "%.2f"|format(m.ask) }}</span>
+        </div>
+        {% endif %}
+        {% if m.volume %}
+        <div class="mc-row">
+          <span>Volume</span>
+          <span>{{ "{:,}".format(m.volume) }}</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Welcome{% endblock %}
+{% block guest_content %}
+<div class="landing-page">
+  <div class="landing-inner">
+    <div class="landing-badge">Built for institutional thinking</div>
+    <h1>Your edge starts<br>with the <span>journal</span>.</h1>
+    <p>Track every trade. Know your numbers. Find what works.<br>Like a prop firm, without the desk.</p>
+    <div class="landing-btns">
+      <a href="{{ url_for('login') }}" class="btn btn-secondary">Login</a>
+      <a href="{{ url_for('register') }}" class="btn btn-primary">Start Free</a>
+    </div>
+    <div class="landing-features">
+      <span><strong>ICT/SMC</strong> tagging</span>
+      <span><strong>$0</strong> forever</span>
+      <span><strong>CSV</strong> import</span>
+    </div>
+  </div>
+</div>
+{% endblock %}

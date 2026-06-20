@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if entry else 'New' }} Notebook Entry{% endblock %}
+{% block page_title %}{{ 'Edit' if entry else 'New' }} Notebook Entry{% endblock %}
+{% block content %}
+<div class="page-narrow card">
+  <form method="POST">
+    <div class="two-col">
+      <div class="fg">
+        <label>Date</label>
+        <input type="date" name="date" value="{{ today if entry else today }}" />
+      </div>
+      <div class="fg">
+        <label>Type</label>
+        <select name="type">
+          <option value="note" {{ 'selected' if entry and entry.type == 'note' }}>Note</option>
+          <option value="plan" {{ 'selected' if entry and entry.type == 'plan' }}>Trading Plan</option>
+          <option value="review" {{ 'selected' if entry and entry.type == 'review' }}>Session Review</option>
+        </select>
+      </div>
+    </div>
+    <div class="fg">
+      <label>Title</label>
+      <input type="text" name="title" value="{{ entry.title if entry else '' }}" placeholder="e.g. Pre-market plan for today" />
+    </div>
+    <div class="fg">
+      <label>Content</label>
+      <textarea name="content" rows="8" style="resize:vertical;font-family:var(--mono);font-size:13px;line-height:1.6;">{{ entry.content if entry else '' }}</textarea>
+    </div>
+    <div class="fg">
+      <label>Mood / Mindset</label>
+      <select name="mood">
+        <option value="">— Select —</option>
+        {% for m in ['Focused', 'Confident', 'Neutral', 'Tired', 'Distracted', 'Anxious', 'Excited', 'Frustrated', 'Calm'] %}
+        <option value="{{ m }}" {{ 'selected' if entry and entry.mood == m }}>{{ m }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary" style="width:100%;">{{ 'Update' if entry else 'Save Entry' }}</button>
+  </form>
+</div>
+{% endblock %}

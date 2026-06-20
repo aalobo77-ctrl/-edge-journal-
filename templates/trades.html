@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Trades{% endblock %}
+{% block page_title %}Trades{% endblock %}
+{% block header_actions %}
+<a href="{{ url_for('add_trade') }}" class="btn btn-primary btn-sm">+ New Trade</a>
+{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="filter-bar">
+    <input type="text" id="searchInput" placeholder="Symbol, setup, tags..." class="fi" />
+    <select id="filterResult" class="fi"><option value="">Result</option><option value="WIN">Wins</option><option value="LOSS">Losses</option><option value="BE">BE</option></select>
+    <select id="filterDir" class="fi"><option value="">Direction</option><option value="LONG">Long</option><option value="SHORT">Short</option></select>
+    <select id="filterSetup" class="fi"><option value="">Setup</option>
+      {% for s in ['FVG','OB','LQ','MSB','CISD','FIF','IFVG','BB','J order','Order Flow','Supply/Demand','Trend','Reversal','Other'] %}
+      <option value="{{ s }}">{{ s }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="table-scroll">
+    <table class="tz-table" id="tradesTable">
+      <thead><tr>
+        <th data-sort="date">Date ⇅</th><th data-sort="symbol">Symbol</th><th data-sort="dir">Dir</th>
+        <th data-sort="entry">Entry</th><th data-sort="exit">Exit</th><th data-sort="qty">Qty</th>
+        <th data-sort="pnl">P&amp;L</th><th data-sort="r">R</th><th data-sort="setup">Setup</th>
+        <th data-sort="session">Session</th><th data-sort="result">Result</th><th></th>
+      </tr></thead>
+      <tbody>
+        {% for t in trades %}
+        <tr class="{% if t.result == 'WIN' %}row-win{% elif t.result == 'LOSS' %}row-loss{% endif %}">
+          <td>{{ t.entry_date.strftime('%m/%d %H:%M') if t.entry_date else '—' }}</td>
+          <td class="sym-cell">{{ t.symbol }}</td>
+          <td><span class="dir-{{ t.direction[:1] }}">{{ t.direction[:1] }}</span></td>
+          <td class="col-num">{{ "%.2f"|format(t.entry_price) if t.entry_price else '—' }}</td>
+          <td class="col-num">{{ "%.2f"|format(t.exit_price) if t.exit_price else '—' }}</td>
+          <td class="col-num">{{ t.quantity or '—' }}</td>
+          <td class="col-num {% if t.pnl and t.pnl >= 0 %}green{% elif t.pnl %}red{% endif %}">{% if t.pnl %}${{ "%.2f"|format(t.pnl) }}{% else %}—{% endif %}</td>
+          <td class="col-num">{{ t.r_multiple or '—' }}</td>
+          <td><span class="trade-tag">{{ t.setup_type or '—' }}</span></td>
+          <td>{{ t.session or '—' }}</td>
+          <td><span class="result-badge {{ t.result }}">{{ t.result or '—' }}</span></td>
+          <td class="act-cell">
+            <a href="{{ url_for('edit_trade', trade_id=t.id) }}" class="act-btn">✎</a>
+            <form method="POST" action="{{ url_for('delete_trade', trade_id=t.id) }}" style="display:inline" onsubmit="return confirm('Delete this trade?')">
+              <button type="submit" class="act-btn danger">✕</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if not trades %}
+  <p class="empty-state">No trades logged yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

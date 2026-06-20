@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Login{% endblock %}
+{% block guest_content %}
+<div class="auth-page">
+  <div class="auth-card">
+    <h1>Welcome back</h1>
+    <form method="POST">
+      <div class="fg">
+        <label>Username</label>
+        <input type="text" name="username" required autofocus />
+      </div>
+      <div class="fg">
+        <label>Password</label>
+        <input type="password" name="password" required />
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%">Login</button>
+    </form>
+    <p class="auth-footer">New here? <a href="{{ url_for('register') }}">Create account</a></p>
+  </div>
+</div>
+{% endblock %}

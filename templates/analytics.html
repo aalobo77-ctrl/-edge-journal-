@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Analytics{% endblock %}
+{% block page_title %}Analytics{% endblock %}
+{% block content %}
+{% if total == 0 %}
+<div class="card"><p class="empty-state">No trade data yet.</p></div>
+{% else %}
+<div class="stats-row">
+  <div class="stat-tile"><span class="stat-tile-value">{{ total }}</span><span class="stat-tile-label">Total</span></div>
+  <div class="stat-tile"><span class="stat-tile-value green">{{ wins }}</span><span class="stat-tile-label">Wins</span></div>
+  <div class="stat-tile"><span class="stat-tile-value red">{{ losses }}</span><span class="stat-tile-label">Losses</span></div>
+  <div class="stat-tile"><span class="stat-tile-value {% if win_rate >= 50 %}green{% else %}red{% endif %}">{{ win_rate }}%</span><span class="stat-tile-label">WR</span></div>
+  <div class="stat-tile"><span class="stat-tile-value">{{ profit_factor }}</span><span class="stat-tile-label">PF</span></div>
+  <div class="stat-tile"><span class="stat-tile-value green">${{ avg_win }}</span><span class="stat-tile-label">Avg Win</span></div>
+  <div class="stat-tile"><span class="stat-tile-value red">-${{ avg_loss|abs }}</span><span class="stat-tile-label">Avg Loss</span></div>
+  <div class="stat-tile"><span class="stat-tile-value">${{ best_trade }}</span><span class="stat-tile-label">Best</span></div>
+  <div class="stat-tile"><span class="stat-tile-value red">-${{ worst_trade|abs }}</span><span class="stat-tile-label">Worst</span></div>
+  <div class="stat-tile"><span class="stat-tile-value">{{ avg_r }}</span><span class="stat-tile-label">Avg R</span></div>
+  <div class="stat-tile"><span class="stat-tile-value {% if expectancy >= 0 %}green{% else %}red{% endif %}">{{ expectancy }}</span><span class="stat-tile-label">Expectancy</span></div>
+</div>
+
+<div class="two-col">
+  <div class="card">
+    <div class="card-header"><span class="card-title">By Session</span></div>
+    <canvas id="sessionChart" height="160"></canvas>
+    <div class="bd-list">
+      {% for row in by_session %}
+      <div class="bd-row">
+        <span>{{ row.session or 'Unspecified' }}</span>
+        <span class="green">+{{ row.wins }}</span>
+        <span class="red">-{{ row.losses }}</span>
+        <span class="net {% if row.net >= 0 %}green{% else %}red{% endif %}">${{ "%.2f"|format(row.net) }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">By Setup</span></div>
+    <canvas id="setupChart" height="160"></canvas>
+    <div class="bd-list">
+      {% for row in by_setup %}
+      <div class="bd-row">
+        <span>{{ row.setup_type or 'Unspecified' }}</span>
+        <span class="green">+{{ row.wins }}</span>
+        <span class="red">-{{ row.losses }}</span>
+        <span class="net {% if row.net >= 0 %}green{% else %}red{% endif %}">${{ "%.2f"|format(row.net) }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="two-col">
+  <div class="card">
+    <div class="card-header"><span class="card-title">By Day of Week</span></div>
+    <canvas id="dowChart" height="140"></canvas>
+    <div class="bd-list">
+      {% for row in by_dow %}
+      <div class="bd-row">
+        <span>{{ row.day }}</span>
+        <span class="green">+{{ row.wins }}</span>
+        <span class="red">-{{ row.losses }}</span>
+        <span class="net {% if row.net >= 0 %}green{% else %}red{% endif %}">${{ "%.2f"|format(row.net) }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Long vs Short</span></div>
+    <canvas id="dirChart" height="140"></canvas>
+    <div class="bd-list">
+      {% for row in by_dir %}
+      <div class="bd-row">
+        <span>{{ row.direction }}</span>
+        <span class="green">+{{ row.wins }}</span>
+        <span class="red">-{{ row.losses }}</span>
+        <span class="net {% if row.net >= 0 %}green{% else %}red{% endif %}">${{ "%.2f"|format(row.net) }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><span class="card-title">P&amp;L Distribution</span></div>
+  <canvas id="distChart" height="160"></canvas>
+</div>
+
+<div class="two-col">
+  <div class="card">
+    <div class="card-header"><span class="card-title">Streaks</span></div>
+    <p style="margin-bottom:6px;">Longest win streak: <strong class="green">{{ consecutive.win_streak }} trades</strong></p>
+    <p>Longest loss streak: <strong class="red">{{ consecutive.loss_streak }} trades</strong></p>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Monthly Metrics</span></div>
+    {% if monthly_returns %}
+    <p style="margin-bottom:6px;">Return: <strong class="{% if monthly_returns.monthly_return >= 0 %}green{% else %}red{% endif %}">{{ "%.2f"|format(monthly_returns.monthly_return) }}%</strong></p>
+    <p style="margin-bottom:6px;">Volatility: <strong>{{ "%.2f"|format(monthly_returns.volatility) }}%</strong></p>
+    <p>Sharpe: <strong>{{ monthly_returns.sharpe }}</strong></p>
+    {% else %}
+    <p class="dim">Need more data (month+).</p>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+{% if total > 0 %}
+const purple = '#7C5CFC', green = '#00E396', red = '#FF4560', dim = '#7A85A0';
+
+new Chart(document.getElementById('sessionChart'), { type:'bar', data:{
+  labels: {{ sess_labels|tojson }},
+  datasets: [
+    { label:'Wins', data:{{ sess_wins|tojson }}, backgroundColor:green },
+    { label:'Losses', data:{{ sess_losses|tojson }}, backgroundColor:red }
+  ]
+}, options:{ responsive:true, plugins:{legend:{labels:{color:dim,font:{size:10}}}}, scales:{x:{ticks:{color:dim}},y:{ticks:{color:dim}}} }});
+
+new Chart(document.getElementById('setupChart'), { type:'bar', data:{
+  labels: {{ setup_labels|tojson }},
+  datasets: [
+    { label:'Wins', data:{{ setup_wins|tojson }}, backgroundColor:green },
+    { label:'Losses', data:{{ setup_losses|tojson }}, backgroundColor:red }
+  ]
+}, options:{ responsive:true, plugins:{legend:{labels:{color:dim,font:{size:10}}}}, scales:{x:{ticks:{color:dim}},y:{ticks:{color:dim}}} }});
+
+new Chart(document.getElementById('dowChart'), { type:'bar', data:{
+  labels: {{ dow_labels|tojson }},
+  datasets: [
+    { label:'Wins', data:{{ dow_wins|tojson }}, backgroundColor:green },
+    { label:'Losses', data:{{ dow_losses|tojson }}, backgroundColor:red }
+  ]
+}, options:{ responsive:true, plugins:{legend:{labels:{color:dim,font:{size:10}}}}, scales:{x:{ticks:{color:dim}},y:{ticks:{color:dim}}} }});
+
+new Chart(document.getElementById('dirChart'), { type:'doughnut', data:{
+  labels: {{ dir_labels|tojson }},
+  datasets: [{ data:{{ dir_nets|tojson }}, backgroundColor:[green,red] }]
+}, options:{ responsive:true, plugins:{legend:{position:'bottom',labels:{color:dim,font:{size:10}}}, tooltip:{callbacks:{label:(i) => `$${i.raw.toFixed(2)}`}}} }});
+
+new Chart(document.getElementById('distChart'), { type:'bar', data:{
+  labels: {{ dist_labels|tojson }},
+  datasets: [{ label:'Trades', data:{{ dist_values|tojson }}, backgroundColor:purple, borderRadius:3 }]
+}, options:{ responsive:true, plugins:{legend:{display:false}}, scales:{x:{ticks:{color:dim}},y:{ticks:{color:dim}}} }});
+{% endif %}
+</script>
+{% endblock %}

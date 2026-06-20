@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Calendar{% endblock %}
+{% block page_title %}Performance Calendar{% endblock %}
+{% block header_actions %}
+<div style="display:flex;gap:8px;align-items:center;">
+  <a href="{{ url_for('calendar', year=prev_y, month=prev_m) }}" class="btn btn-secondary btn-sm">←</a>
+  <span style="font-size:14px;font-weight:600;min-width:140px;text-align:center;">{{ month_name }}</span>
+  <a href="{{ url_for('calendar', year=next_y, month=next_m) }}" class="btn btn-secondary btn-sm">→</a>
+</div>
+{% endblock %}
+{% block content %}
+<!-- Monthly KPI strip -->
+<div class="goal-strip" style="margin-bottom:20px;">
+  <div class="goal-block">
+    <span class="goal-block-label">P&amp;L</span>
+    <span class="goal-block-value {% if monthly_pnl >= 0 %}green{% else %}red{% endif %}">${{ "%.2f"|format(monthly_pnl) }}</span>
+  </div>
+  <div class="goal-block">
+    <span class="goal-block-label">Trades</span>
+    <span class="goal-block-value">{{ monthly_trades }}</span>
+  </div>
+  <div class="goal-block">
+    <span class="goal-block-label">Win Rate</span>
+    <span class="goal-block-value {% if monthly_wr >= 50 %}green{% else %}red{% endif %}">{{ monthly_wr }}%</span>
+  </div>
+  <div class="goal-block">
+    <span class="goal-block-label">Trading Days</span>
+    <span class="goal-block-value">{{ trading_days }}</span>
+  </div>
+  <div class="goal-block">
+    <span class="goal-block-label">Avg/Day</span>
+    <span class="goal-block-value {% if avg_day >= 0 %}green{% else %}red{% endif %}">${{ "%.2f"|format(avg_day) }}</span>
+  </div>
+  <div class="goal-block">
+    <span class="goal-block-label">Avg R</span>
+    <span class="goal-block-value">{{ avg_r_m }}</span>
+  </div>
+  <div class="goal-block primary">
+    <span class="goal-block-label">YTD</span>
+    <span class="goal-block-value {% if ytd_pnl >= 0 %}green{% else %}red{% endif %}">${{ "%.2f"|format(ytd_pnl) }}</span>
+  </div>
+</div>
+
+<!-- Calendar grid -->
+<div class="card" style="padding:24px;">
+  <div class="cal-grid">
+    <div class="cal-header">Mon</div>
+    <div class="cal-header">Tue</div>
+    <div class="cal-header">Wed</div>
+    <div class="cal-header">Thu</div>
+    <div class="cal-header">Fri</div>
+    <div class="cal-header">Sat</div>
+    <div class="cal-header">Sun</div>
+    {% for week in month_days %}
+      {% for day in week %}
+        {% if day %}
+          {% set d = day['day'] %}
+          {% set data = day['data'] %}
+          {% set entries = day['entries'] %}
+          {% if data %}
+            {% set pnl = data['pnl'] %}
+            {% set cls = 'cal-day has-trades' %}
+            {% if pnl > 0 %}{% set cls = cls + ' cal-win' %}{% elif pnl < 0 %}{% set cls = cls + ' cal-loss' %}{% else %}{% set cls = cls + ' cal-be' %}{% endif %}
+          {% else %}
+            {% set cls = 'cal-day' %}
+          {% endif %}
+          <div class="{{ cls }}">
+            <span class="cal-num">{{ d }}</span>
+            {% if data %}
+            <span class="cal-pnl {% if data['pnl'] > 0 %}green{% elif data['pnl'] < 0 %}red{% endif %}">${{ "%.0f"|format(data['pnl']) }}</span>
+            <span class="cal-meta">{{ data['wins'] }}/{{ data['losses'] }}</span>
+            {% endif %}
+            {% if entries %}
+            <div class="cal-entries">
+              {% for e in entries %}
+              <span class="cal-entry-dot" title="{{ e.title }}"></span>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        {% else %}
+          <div class="cal-day cal-empty"></div>
+        {% endif %}
+      {% endfor %}
+    {% endfor %}
+  </div>
+</div>
+
+<style>
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+.cal-header {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 6px 0;
+}
+.cal-day {
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  min-height: 80px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  transition: background 0.15s;
+}
+.cal-day:hover { background: var(--card3); }
+.cal-empty { background: transparent; border-color: transparent; min-height: 0; }
+.cal-num { font-size: 13px; font-weight: 600; color: var(--text2); margin-bottom: 4px; }
+.cal-pnl { font-size: 12px; font-weight: 700; font-family: var(--mono); }
+.cal-meta { font-size: 10px; color: var(--dim); }
+.cal-entries { display: flex; gap: 3px; margin-top: 4px; flex-wrap: wrap; }
+.cal-entry-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--purple); display: inline-block;
+}
+@media (max-width:600px) {
+  .cal-day { min-height: 50px; padding: 4px; }
+  .cal-num { font-size: 11px; }
+  .cal-pnl { font-size: 10px; }
+  .cal-meta { display: none; }
+}
+</style>
+{% endblock %}
