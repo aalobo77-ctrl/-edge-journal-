@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Strategy Performance{% endblock %}
+{% block page_title %}📊 Strategy Performance{% endblock %}
+{% block content %}
+{% if setups %}
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">
+  {% for name, data in setups.items()|sort(attribute='1.pnl', reverse=True) %}
+  <div class="card" style="padding:16px;border-left:3px solid {% if data.wr >= 60 %}var(--green){% elif data.wr >= 40 %}var(--orange){% else %}var(--red){% endif %};">
+    <div style="font-weight:600;font-size:14px;">{{ name }}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px;font-size:13px;font-family:var(--mono);">
+      <div><span class="dim">Trades</span><br><strong>{{ data.trades }}</strong></div>
+      <div><span class="dim">Win Rate</span><br><strong style="color:{% if data.wr >= 60 %}var(--green){% elif data.wr >= 40 %}var(--orange){% else %}var(--red){% endif %};">{{ data.wr }}%</strong></div>
+      <div><span class="dim">P&L</span><br><strong style="color:{% if data.pnl >= 0 %}var(--green){% else %}var(--red){% endif %};">${{ data.pnl }}</strong></div>
+      <div><span class="dim">Avg R</span><br><strong>{{ data.avg_r }}R</strong></div>
+      <div><span class="dim">Wins</span><br><strong style="color:var(--green);">{{ data.wins }}</strong></div>
+      <div><span class="dim">Losses</span><br><strong style="color:var(--red);">{{ data.losses }}</strong></div>
+    </div>
+    <div style="margin-top:10px;height:4px;background:var(--card3);border-radius:2px;overflow:hidden;">
+      <div style="height:100%;width:{{ data.wr }}%;background:{% if data.wr >= 60 %}var(--green){% elif data.wr >= 40 %}var(--orange){% else %}var(--red){% endif %};border-radius:2px;"></div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:40px;">
+  <p>No trades yet. Log some trades to see your strategy performance.</p>
+  <a href="{{ url_for('add_trade') }}" class="btn btn-primary">Log Trade</a>
+</div>
+{% endif %}
+{% endblock %}

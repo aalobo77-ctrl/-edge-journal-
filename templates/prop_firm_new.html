@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}New Challenge{% endblock %}
+{% block page_title %}🏦 New Prop Firm Challenge{% endblock %}
+{% block content %}
+<form method="POST" style="max-width:500px;">
+  <div class="card" style="display:flex;flex-direction:column;gap:12px;">
+    <div class="fg"><label>Firm Name</label><input type="text" name="firm_name" placeholder="FTMO, MFF, FundedNext..." required /></div>
+    <div class="fg"><label>Account Size ($)</label><input type="number" name="account_size" value="100000" step="1000" required /></div>
+    <div class="fg"><label>Max Daily Loss ($)</label><input type="number" name="max_daily_loss" value="5000" step="100" required /></div>
+    <div class="fg"><label>Max Drawdown ($)</label><input type="number" name="max_drawdown" value="10000" step="100" required /></div>
+    <div class="fg"><label>Profit Target ($)</label><input type="number" name="profit_target" value="10000" step="100" required /></div>
+    <button type="submit" class="btn btn-primary" style="margin-top:8px;">Create Challenge</button>
+  </div>
+</form>
+{% endblock %}

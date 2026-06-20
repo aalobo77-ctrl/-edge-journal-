@@ -18,6 +18,12 @@ db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
+@app.template_filter('fromjson')
+def fromjson_filter(s):
+    import json
+    try: return json.loads(s)
+    except: return {}
+
 # ─── MODELS ─────────────────────────────────────────────
 
 TAG_CHOICES = ['FVG', 'Order Block', 'MSS / CHoCH', 'Liquidity Grab', 'Silver Bullet',
@@ -237,6 +243,52 @@ class SyncLog(db.Model):
     event = db.Column(db.String(50))
     trade_id = db.Column(db.Integer, db.ForeignKey('trade.id'), nullable=True)
     details = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class PropFirmChallenge(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    firm_name = db.Column(db.String(100))
+    account_size = db.Column(db.Float, default=100000)
+    max_daily_loss = db.Column(db.Float, default=5000)
+    max_drawdown = db.Column(db.Float, default=10000)
+    profit_target = db.Column(db.Float, default=10000)
+    phase = db.Column(db.String(30), default='Phase 1')
+    status = db.Column(db.String(20), default='active')
+    start_balance = db.Column(db.Float, default=100000)
+    current_balance = db.Column(db.Float, default=100000)
+    peak_balance = db.Column(db.Float, default=100000)
+    start_date = db.Column(db.Date, default=date.today)
+    end_date = db.Column(db.Date, nullable=True)
+    daily_pnl = db.Column(db.Text, default='{}')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class TradeRating(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    trade_id = db.Column(db.Integer, db.ForeignKey('trade.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    rating = db.Column(db.Integer)
+    entry_score = db.Column(db.Integer, default=3)
+    exit_score = db.Column(db.Integer, default=3)
+    risk_score = db.Column(db.Integer, default=3)
+    discipline_score = db.Column(db.Integer, default=3)
+    emotion_score = db.Column(db.Integer, default=3)
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class CommunityInsight(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    trade_id = db.Column(db.Integer, db.ForeignKey('trade.id'), nullable=True)
+    insight_type = db.Column(db.String(30))
+    strategy = db.Column(db.String(100))
+    symbol = db.Column(db.String(20))
+    direction = db.Column(db.String(10))
+    r_multiple = db.Column(db.Float)
+    result = db.Column(db.String(10))
+    note = db.Column(db.Text)
+    anonymous = db.Column(db.Boolean, default=True)
+    upvotes = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 with app.app_context():
@@ -1435,6 +1487,134 @@ def api_ai_review_data():
         'hourly': {str(k): v for k, v in sorted(hourly.items())},
         'total': len(trades),
     })
+
+# ─── PROP FIRM CHALLENGE ─────────────────────────────
+
+@app.route('/prop-firm')
+@login_required
+def prop_firm():
+    challenges = PropFirmChallenge.query.filter_by(user_id=current_user.id).order_by(PropFirmChallenge.created_at.desc()).all()
+    trades = Trade.query.filter_by(user_id=current_user.id).order_by(Trade.entry_date.desc()).all()
+    return render_template('prop_firm.html', challenges=challenges, trades=trades, today=date.today())
+
+@app.route('/prop-firm/new', methods=['GET','POST'])
+@login_required
+def prop_firm_new():
+    if request.method == 'POST':
+        c = PropFirmChallenge(user_id=current_user.id, firm_name=request.form['firm_name'], account_size=float(request.form['account_size']), max_daily_loss=float(request.form['max_daily_loss']), max_drawdown=float(request.form['max_drawdown']), profit_target=float(request.form['profit_target']), start_balance=float(request.form['account_size']), current_balance=float(request.form['account_size']), peak_balance=float(request.form['account_size']))
+        db.session.add(c); db.session.commit()
+        flash('Challenge created!','success')
+        return redirect(url_for('prop_firm'))
+    return render_template('prop_firm_new.html')
+
+@app.route('/prop-firm/delete/<int:cid>', methods=['POST'])
+@login_required
+def prop_firm_delete(cid):
+    c = PropFirmChallenge.query.get_or_404(cid)
+    if c.user_id == current_user.id:
+        db.session.delete(c); db.session.commit()
+    return redirect(url_for('prop_firm'))
+
+@app.route('/api/prop-firm/update/<int:cid>', methods=['POST'])
+@login_required
+def prop_firm_update(cid):
+    c = PropFirmChallenge.query.get_or_404(cid)
+    if c.user_id != current_user.id: return jsonify({'error':'unauthorized'}),403
+    trades = Trade.query.filter_by(user_id=current_user.id).filter(Trade.entry_date >= c.start_date).order_by(Trade.entry_date).all()
+    balance = c.start_balance; peak = c.start_balance; daily = {}
+    for t in trades:
+        if t.entry_date: d = t.entry_date.strftime('%Y-%m-%d')
+        else: continue
+        daily[d] = daily.get(d,0) + (t.pnl or 0)
+        balance += t.pnl or 0
+        if balance > peak: peak = balance
+    c.current_balance = round(balance,2)
+    c.peak_balance = round(peak,2)
+    c.daily_pnl = json.dumps({k:round(v,2) for k,v in sorted(daily.items())})
+    td_pnl_actual = daily.get(date.today().strftime('%Y-%m-%d'), 0)
+    status = 'active'
+    if balance <= c.start_balance - c.max_drawdown: status = 'failed'
+    elif balance >= c.start_balance + c.profit_target: status = 'passed'
+    elif abs(td_pnl_actual) >= c.max_daily_loss: status = 'failed'
+    c.status = status
+    db.session.commit()
+    return redirect(url_for('prop_firm'))
+
+# ─── TRADE RATING ─────────────────────────────────────
+
+@app.route('/trade/rate/<int:trade_id>', methods=['GET','POST'])
+@login_required
+def trade_rate(trade_id):
+    trade = Trade.query.get_or_404(trade_id)
+    if trade.user_id != current_user.id: return redirect(url_for('trades'))
+    existing = TradeRating.query.filter_by(trade_id=trade_id, user_id=current_user.id).first()
+    if request.method == 'POST':
+        if existing: db.session.delete(existing)
+        tr = TradeRating(trade_id=trade_id, user_id=current_user.id, rating=int(request.form['rating']), entry_score=int(request.form.get('entry_score',3)), exit_score=int(request.form.get('exit_score',3)), risk_score=int(request.form.get('risk_score',3)), discipline_score=int(request.form.get('discipline_score',3)), emotion_score=int(request.form.get('emotion_score',3)), notes=request.form.get('notes',''))
+        db.session.add(tr); db.session.commit()
+        flash('Trade rated!','success'); return redirect(url_for('trades'))
+    return render_template('trade_rate.html', trade=trade, existing=existing)
+
+# ─── STRATEGY PERFORMANCE ─────────────────────────────
+
+@app.route('/strategy-performance')
+@login_required
+def strategy_performance():
+    trades = Trade.query.filter_by(user_id=current_user.id).order_by(Trade.entry_date.desc()).all()
+    setups = {}
+    for t in trades:
+        s = t.setup_type or 'Unknown'
+        if s not in setups: setups[s] = {'trades':0,'wins':0,'losses':0,'pnl':0,'r_sum':0}
+        setups[s]['trades'] += 1
+        if t.result == 'WIN': setups[s]['wins'] += 1
+        elif t.result == 'LOSS': setups[s]['losses'] += 1
+        setups[s]['pnl'] += t.pnl or 0
+        setups[s]['r_sum'] += t.r_multiple or 0
+    for s,d in setups.items():
+        d['wr'] = round(d['wins']/d['trades']*100,1) if d['trades'] else 0
+        d['avg_r'] = round(d['r_sum']/d['trades'],2) if d['trades'] else 0
+        d['pnl'] = round(d['pnl'],2)
+    return render_template('strategy_performance.html', setups=setups)
+
+# ─── COMMUNITY ────────────────────────────────────────
+
+@app.route('/community')
+@login_required
+def community():
+    insights = CommunityInsight.query.order_by(CommunityInsight.created_at.desc()).limit(50).all()
+    total_users = User.query.count()
+    total_trades = Trade.query.count()
+    global_wr = round(len([t for t in Trade.query.filter(Trade.result.in_(['WIN','LOSS'])).all() if t.result=='WIN'])/max(1,Trade.query.filter(Trade.result.in_(['WIN','LOSS'])).count())*100,1)
+    return render_template('community.html', insights=insights, total_users=total_users, total_trades=total_trades, global_wr=global_wr)
+
+@app.route('/api/community/stats')
+def community_stats():
+    trades = Trade.query.filter(Trade.result.in_(['WIN','LOSS'])).all()
+    total = len(trades)
+    wins = len([t for t in trades if t.result=='WIN'])
+    best_trade = max(trades, key=lambda t: t.r_multiple or 0) if trades else None
+    avg_r = sum(t.r_multiple or 0 for t in trades)/total if total else 0
+    setups = {}
+    for t in trades:
+        s = t.setup_type or 'Unknown'
+        if s not in setups: setups[s]={'wins':0,'losses':0}
+        if t.result=='WIN': setups[s]['wins']+=1
+        else: setups[s]['losses']+=1
+    top_setup = max(setups, key=lambda s: setups[s]['wins']/(max(1,setups[s]['wins']+setups[s]['losses']))) if setups else None
+    return jsonify({'total_trades':total,'global_wr':round(wins/total*100,1) if total else 0,'top_setup':top_setup,'avg_r':round(avg_r,2),'best_r':best_trade.r_multiple if best_trade else 0})
+
+@app.route('/api/community/share', methods=['POST'])
+@login_required
+def community_share():
+    data = request.get_json()
+    trade_id = data.get('trade_id')
+    trade = Trade.query.get(trade_id)
+    if not trade or trade.user_id != current_user.id: return jsonify({'error':'not found'}),404
+    existing = CommunityInsight.query.filter_by(user_id=current_user.id, trade_id=trade_id).first()
+    if existing: return jsonify({'error':'already shared'}),400
+    ci = CommunityInsight(user_id=current_user.id, trade_id=trade_id, insight_type='trade', strategy=trade.setup_type or '', symbol=trade.symbol, direction=trade.direction, r_multiple=trade.r_multiple, result=trade.result, note=data.get('note',''), anonymous=data.get('anonymous',True))
+    db.session.add(ci); db.session.commit()
+    return jsonify({'status':'shared'})
 
 # ─── MARKET DATA ──────────────────────────────────────────
 

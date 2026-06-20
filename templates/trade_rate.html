@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Rate Trade{% endblock %}
+{% block page_title %}⭐ Rate Trade{% endblock %}
+{% block content %}
+<div class="two-col">
+  <div class="card">
+    <div class="card-header"><span class="card-title">Trade: {{ trade.symbol }}</span></div>
+    <div style="font-size:13px;line-height:2;">
+      <div><span class="dim">Direction:</span> <strong>{{ trade.direction }}</strong></div>
+      <div><span class="dim">P&L:</span> <strong style="color:{% if trade.pnl and trade.pnl > 0 %}var(--green){% else %}var(--red){% endif %};">${{ trade.pnl or 0 }}</strong></div>
+      <div><span class="dim">R Multiple:</span> <strong>{{ trade.r_multiple or 0 }}R</strong></div>
+      <div><span class="dim">Setup:</span> <strong>{{ trade.setup_type or '—' }}</strong></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Rating</span></div>
+    <form method="POST">
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div class="fg"><label>Overall ⭐</label>
+          <div style="display:flex;gap:4px;font-size:24px;">
+            {% for i in range(1,6) %}
+            <label style="cursor:pointer;"><input type="radio" name="rating" value="{{ i }}" {{ 'checked' if existing and existing.rating == i }} style="display:none;" onchange="this.closest('.fg').querySelectorAll('label').forEach((l,j)=>l.style.color=j<{{ i }}?'#f59e0b':'var(--border)');" /><span style="color:{% if existing and existing.rating >= i %}#f59e0b{% else %}var(--border){% endif %};">★</span></label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="fg"><label>Entry Quality (1-5)</label><input type="number" name="entry_score" min="1" max="5" value="{{ existing.entry_score if existing else 3 }}" /></div>
+        <div class="fg"><label>Exit Quality (1-5)</label><input type="number" name="exit_score" min="1" max="5" value="{{ existing.exit_score if existing else 3 }}" /></div>
+        <div class="fg"><label>Risk Management (1-5)</label><input type="number" name="risk_score" min="1" max="5" value="{{ existing.risk_score if existing else 3 }}" /></div>
+        <div class="fg"><label>Discipline (1-5)</label><input type="number" name="discipline_score" min="1" max="5" value="{{ existing.discipline_score if existing else 3 }}" /></div>
+        <div class="fg"><label>Emotional Control (1-5)</label><input type="number" name="emotion_score" min="1" max="5" value="{{ existing.emotion_score if existing else 3 }}" /></div>
+        <div class="fg"><label>Notes</label><textarea name="notes" rows="2">{{ existing.notes if existing else '' }}</textarea></div>
+        <button type="submit" class="btn btn-primary">Save Rating</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

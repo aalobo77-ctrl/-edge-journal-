@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Prop Firm Challenges{% endblock %}
+{% block page_title %}🏦 Prop Firm Tracker{% endblock %}
+{% block header_actions %}<a href="{{ url_for('prop_firm_new') }}" class="btn btn-primary btn-sm">+ New Challenge</a>{% endblock %}
+{% block content %}
+<div class="two-col" style="margin-bottom:16px;">
+  <div class="card" style="background:linear-gradient(135deg,var(--card2),var(--card3));border:1px solid var(--border);">
+    <div style="font-size:12px;color:var(--dim);">Active Challenges</div>
+    <div style="font-size:28px;font-weight:700;font-family:var(--mono);">{{ challenges|selectattr('status','equalto','active')|list|length }}</div>
+  </div>
+  <div class="card" style="background:linear-gradient(135deg,var(--card2),var(--card3));border:1px solid var(--border);">
+    <div style="font-size:12px;color:var(--dim);">Passed</div>
+    <div style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--green);">{{ challenges|selectattr('status','equalto','passed')|list|length }}</div>
+  </div>
+</div>
+{% for c in challenges %}
+{% set daily = c.daily_pnl|fromjson if c.daily_pnl and c.daily_pnl != '{}' else {} %}
+{% set todays_pnl = daily.get(today|string, 0) %}
+{% set progress = ((c.current_balance - c.start_balance) / (c.profit_target) * 100)|round(1) if c.profit_target else 0 %}
+{% set dd_pct = ((c.peak_balance - c.current_balance) / c.account_size * 100)|round(1) if c.account_size else 0 %}
+<div class="card" style="margin-bottom:12px;{% if c.status == 'passed' %}border-left:4px solid var(--green);{% elif c.status == 'failed' %}border-left:4px solid var(--red);{% else %}border-left:4px solid var(--purple);{% endif %}">
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:150px;">
+      <div style="font-weight:600;">{{ c.firm_name or 'Challenge' }} <span class="trade-tag" style="{% if c.status=='active' %}color:var(--purple);background:var(--purple-bg){% elif c.status=='passed' %}color:var(--green);background:var(--green-bg){% else %}color:var(--red);background:var(--red-bg){% endif %}">{{ c.status|upper }}</span></div>
+      <div style="font-size:12px;color:var(--dim);">Phase: {{ c.phase }} · Started {{ c.start_date.strftime('%b %d') }}</div>
+    </div>
+    <div style="display:flex;gap:16px;font-size:13px;font-family:var(--mono);flex-wrap:wrap;">
+      <div><span class="dim">Balance</span> <strong style="color:{% if c.current_balance >= c.start_balance %}var(--green){% else %}var(--red){% endif %};">${{ c.current_balance|int }}</strong></div>
+      <div><span class="dim">Target</span> ${{ (c.start_balance + c.profit_target)|int }}</div>
+      <div><span class="dim">DD</span> <strong style="color:{% if dd_pct > 6 %}var(--red){% elif dd_pct > 3 %}var(--orange){% else %}var(--green){% endif %};">{{ dd_pct }}%</strong></div>
+      <div><span class="dim">Daily</span> <strong style="color:{% if todays_pnl and todays_pnl < -c.max_daily_loss %}var(--red){% else %}var(--text1){% endif %};">${{ todays_pnl|int }}</strong></div>
+    </div>
+    <form method="POST" action="{{ url_for('prop_firm_update', cid=c.id) }}" style="display:inline;">
+      <button class="btn btn-sm btn-outline" onclick="return confirm('Refresh stats?')">🔄</button>
+    </form>
+    <form method="POST" action="{{ url_for('prop_firm_delete', cid=c.id) }}" style="display:inline;">
+      <button class="btn btn-sm btn-outline" style="color:var(--red);" onclick="return confirm('Delete?')">✕</button>
+    </form>
+  </div>
+  <div style="margin-top:12px;">
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:4px;">
+      <span>Progress to target</span><span>{{ progress }}%</span>
+    </div>
+    <div style="height:6px;background:var(--card3);border-radius:3px;overflow:hidden;">
+      <div style="height:100%;width:{{ [0,progress]|max }}%;background:{% if progress >= 100 %}var(--green){% else %}var(--purple){% endif %};border-radius:3px;transition:width .5s;"></div>
+    </div>
+  </div>
+  <div style="margin-top:8px;display:flex;gap:16px;font-size:11px;color:var(--dim);">
+    <span>Max Daily Loss: <strong style="color:var(--red);">${{ c.max_daily_loss|int }}</strong></span>
+    <span>Max Drawdown: <strong style="color:var(--red);">${{ c.max_drawdown|int }}</strong></span>
+    <span>Profit Target: <strong style="color:var(--green);">${{ c.profit_target|int }}</strong></span>
+  </div>
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:40px;">
+  <div style="font-size:40px;margin-bottom:12px;">🏦</div>
+  <p>No challenges yet. Track your FTMO, MFF, or any prop firm evaluation.</p>
+  <a href="{{ url_for('prop_firm_new') }}" class="btn btn-primary">Start Challenge</a>
+</div>
+{% endfor %}
+{% endblock %}
